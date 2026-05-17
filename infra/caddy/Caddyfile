@@ -1,39 +1,39 @@
 {
-  email {$CADDY_ACME_EMAIL}
-  servers {
-    protocols h1 h2 h3
-  }
+	email {$CADDY_ACME_EMAIL}
+	servers {
+		protocols h1 h2 h3
+	}
 }
 
 {$APP_DOMAIN} {
-  encode zstd gzip
+	encode zstd gzip
 
-  header {
-    X-Content-Type-Options nosniff
-    Referrer-Policy strict-origin-when-cross-origin
-    Permissions-Policy "camera=(), microphone=(), geolocation=()"
-  }
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
 
-  reverse_proxy web:80
+	reverse_proxy web:80
 }
 
 {$API_DOMAIN} {
-  encode zstd gzip
+	encode zstd gzip
 
-  header {
-    X-Content-Type-Options nosniff
-    Referrer-Policy strict-origin-when-cross-origin
-  }
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
 
-  reverse_proxy api:3000
+	reverse_proxy api:3000
 }
 
 {$COLLAB_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy collab:3001
+	encode zstd gzip
+	reverse_proxy collab:3001
 }
 
 {$SUPABASE_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy {$SUPABASE_UPSTREAM}
+	encode zstd gzip
+	reverse_proxy {$SUPABASE_UPSTREAM}
 }

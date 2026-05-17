@@ -1,0 +1,9 @@
+.git
+node_modules
+dist
+.env
+.env.local
+coverage
+infra/supabase/volumes
+supabase/.temp
+supabase/.branches

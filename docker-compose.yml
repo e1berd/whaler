@@ -1,0 +1,89 @@
+name: whaler
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgres://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
+      RUNNER_INTERNAL_URL: ${RUNNER_INTERNAL_URL_DOCKER:-http://runner:3002}
+      RUNNER_INTERNAL_TOKEN: ${RUNNER_INTERNAL_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - runner
+    restart: unless-stopped
+
+  collab:
+    build:
+      context: .
+      dockerfile: apps/collab/Dockerfile
+    environment:
+      NODE_ENV: production
+      COLLAB_PORT: 3001
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgres://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  runner:
+    build:
+      context: .
+      dockerfile: apps/runner/Dockerfile
+    environment:
+      NODE_ENV: production
+      RUNNER_PORT: 3002
+      RUNNER_INTERNAL_TOKEN: ${RUNNER_INTERNAL_TOKEN}
+      DOCKER_SOCKET_PATH: /var/run/docker.sock
+      SANDBOX_MEMORY_BYTES: ${SANDBOX_MEMORY_BYTES:-536870912}
+      SANDBOX_NANO_CPUS: ${SANDBOX_NANO_CPUS:-1000000000}
+      SANDBOX_PIDS_LIMIT: ${SANDBOX_PIDS_LIMIT:-256}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_COLLAB_URL: ${VITE_COLLAB_URL:-ws://localhost:3001}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://127.0.0.1:54321}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      API_DOMAIN: ${API_DOMAIN:-api.localhost}
+      COLLAB_DOMAIN: ${COLLAB_DOMAIN:-collab.localhost}
+      SUPABASE_DOMAIN: ${SUPABASE_DOMAIN:-supabase.localhost}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
+      SUPABASE_UPSTREAM: ${SUPABASE_UPSTREAM:-host.docker.internal:54321}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "80:80"
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - collab
+      - web
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

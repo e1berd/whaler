@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "baseUrl": ".",
+    "paths": {
+      "@whaler/shared": ["packages/shared/src/index.ts"],
+      "@whaler/shared/*": ["packages/shared/src/*"],
+      "@whaler/db": ["packages/db/src/index.ts"],
+      "@whaler/db/*": ["packages/db/src/*"],
+      "@whaler/api/*": ["apps/api/src/*"],
+      "@/*": ["apps/web/src/*"]
+    }
+  }
+}

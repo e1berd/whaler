@@ -23,7 +23,7 @@ dev-runner:
     pnpm --filter @whaler/runner dev
 
 supabase-start:
-    supabase start
+    supabase start -x edge-runtime
 
 supabase-stop:
     supabase stop

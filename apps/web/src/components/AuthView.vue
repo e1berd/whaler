@@ -36,7 +36,13 @@ async function submit() {
         </div>
       </div>
 
-      <v-btn-toggle v-model="mode" divided mandatory density="comfortable" class="mb-5">
+      <v-btn-toggle
+        v-model="mode"
+        mandatory
+        density="comfortable"
+        color="primary"
+        class="auth-mode-toggle mb-6"
+      >
         <v-btn value="sign-in" prepend-icon="mdi-login">Sign in</v-btn>
         <v-btn value="sign-up" prepend-icon="mdi-account-plus">Sign up</v-btn>
       </v-btn-toggle>
@@ -48,15 +54,17 @@ async function submit() {
           label="Email"
           autocomplete="email"
           density="comfortable"
-          variant="outlined"
+          variant="solo-filled"
+          prepend-inner-icon="mdi-email-outline"
         />
         <v-text-field
           v-model="password"
           type="password"
           label="Password"
-          autocomplete="current-password"
+          :autocomplete="mode === 'sign-in' ? 'current-password' : 'new-password'"
           density="comfortable"
-          variant="outlined"
+          variant="solo-filled"
+          prepend-inner-icon="mdi-lock-outline"
         />
         <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">
           {{ error }}
@@ -64,7 +72,9 @@ async function submit() {
         <v-btn
           type="submit"
           color="primary"
+          variant="elevated"
           block
+          class="auth-submit"
           :loading="loading"
           prepend-icon="mdi-arrow-right"
         >

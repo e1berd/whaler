@@ -47,11 +47,15 @@ function usersForFile(fileId: string) {
       :key="file.id"
       :active="file.id === activeFileId"
       :disabled="file.kind === 'directory'"
+      lines="one"
       :style="{ paddingInlineStart: `${12 + depth(file.path) * 16}px` }"
       @click="file.kind === 'file' && emit('open', file)"
     >
       <template #prepend>
-        <v-icon :icon="file.kind === 'directory' ? 'mdi-folder-outline' : 'mdi-file-code-outline'" />
+        <v-icon
+          class="file-icon"
+          :icon="file.kind === 'directory' ? 'mdi-folder-outline' : 'mdi-file-code-outline'"
+        />
       </template>
       <v-list-item-title>{{ name(file.path) }}</v-list-item-title>
       <template #append>

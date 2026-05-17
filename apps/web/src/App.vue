@@ -3,6 +3,7 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { HocuspocusProvider } from "@hocuspocus/provider"
 import * as Y from "yjs"
+import { useDisplay, useTheme } from "vuetify"
 import { colorFromUserId, type AwarenessUser, type FileLocation, type SandboxImage } from "@whaler/shared"
 import AuthView from "@/components/AuthView.vue"
 import CodeEditor from "@/components/CodeEditor.vue"
@@ -32,6 +33,11 @@ type PresenceEntry = {
   location?: FileLocation
 }
 
+type AppPage = "workspace" | "settings"
+type ThemePreference = "light" | "dark" | "system"
+
+const THEME_STORAGE_KEY = "whaler.theme-preference"
+
 const session = ref<Session | null>(null)
 const images = ref<SandboxImage[]>([])
 const workspaces = ref<Workspace[]>([])
@@ -45,12 +51,33 @@ const newPath = ref("src/new-file.ts")
 const creatingFile = ref(false)
 const error = ref<string | null>(null)
 const presence = ref<PresenceEntry[]>([])
+const activePage = ref<AppPage>("workspace")
+const themePreference = ref<ThemePreference>("system")
+const systemPrefersDark = ref(false)
 
 let presenceProvider: HocuspocusProvider | null = null
 let presenceDoc: Y.Doc | null = null
+let removeThemeMediaListener: (() => void) | null = null
 
+const theme = useTheme()
+const { mdAndUp } = useDisplay()
 const accessToken = computed(() => session.value?.access_token ?? "")
 const selectedWorkspace = computed(() => workspaces.value.find((item) => item.id === selectedWorkspaceId.value) ?? null)
+const selectedWorkspaceStatusIcon = computed(() => {
+  switch (selectedWorkspace.value?.containerStatus) {
+    case "running":
+      return "mdi-check-circle-outline"
+    case "starting":
+    case "pending":
+      return "mdi-progress-clock"
+    case "stopped":
+      return "mdi-stop-circle-outline"
+    case "error":
+      return "mdi-alert-circle-outline"
+    default:
+      return "mdi-circle-outline"
+  }
+})
 const currentUser = computed<AwarenessUser>(() => {
   const user = session.value?.user
   const id = user?.id ?? "anonymous"
@@ -65,6 +92,63 @@ const currentUser = computed<AwarenessUser>(() => {
 
   return awarenessUser
 })
+const effectiveThemeName = computed(() => {
+  if (themePreference.value === "system") return systemPrefersDark.value ? "whalerDark" : "whalerLight"
+  return themePreference.value === "dark" ? "whalerDark" : "whalerLight"
+})
+const effectiveThemeLabel = computed(() => {
+  if (themePreference.value === "system") return systemPrefersDark.value ? "System dark" : "System light"
+  return themePreference.value === "dark" ? "Dark" : "Light"
+})
+const activePageTitle = computed(() => (activePage.value === "settings" ? "Settings" : selectedWorkspace.value?.name ?? "Workspace"))
+const activePageIcon = computed(() => (activePage.value === "settings" ? "mdi-cog-outline" : "mdi-file-code-outline"))
+const themeOptions = [
+  {
+    value: "light",
+    icon: "mdi-white-balance-sunny",
+    title: "Light"
+  },
+  {
+    value: "dark",
+    icon: "mdi-weather-night",
+    title: "Dark"
+  },
+  {
+    value: "system",
+    icon: "mdi-theme-light-dark",
+    title: "System"
+  }
+] satisfies Array<{ value: ThemePreference; icon: string; title: string }>
+
+function isThemePreference(value: string | null): value is ThemePreference {
+  return value === "light" || value === "dark" || value === "system"
+}
+
+function applyDocumentTheme(themeName: string) {
+  if (typeof document === "undefined") return
+  const mode = themeName === "whalerDark" ? "dark" : "light"
+  document.documentElement.dataset.theme = mode
+  document.documentElement.style.colorScheme = mode
+}
+
+function initializeThemePreference() {
+  if (typeof window === "undefined") return
+
+  const storedPreference = window.localStorage.getItem(THEME_STORAGE_KEY)
+  if (isThemePreference(storedPreference)) {
+    themePreference.value = storedPreference
+  }
+
+  const media = window.matchMedia("(prefers-color-scheme: dark)")
+  systemPrefersDark.value = media.matches
+
+  const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+    systemPrefersDark.value = event.matches
+  }
+
+  media.addEventListener("change", handleSystemThemeChange)
+  removeThemeMediaListener = () => media.removeEventListener("change", handleSystemThemeChange)
+}
 
 function client() {
   if (!accessToken.value) throw new Error("Missing session")
@@ -210,6 +294,8 @@ async function signOut() {
 }
 
 onMounted(async () => {
+  initializeThemePreference()
+
   const result = await supabase.auth.getSession()
   session.value = result.data.session
   await loadInitialData()
@@ -233,110 +319,354 @@ watch(selectedWorkspaceId, async () => {
 
 watch(activeFile, updatePresenceLocation)
 watch(currentUser, () => presenceProvider?.setAwarenessField("user", currentUser.value))
+watch(
+  effectiveThemeName,
+  (themeName) => {
+    theme.global.name.value = themeName
+    applyDocumentTheme(themeName)
+  },
+  { immediate: true }
+)
+watch(themePreference, (preference) => {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(THEME_STORAGE_KEY, preference)
+})
 
-onBeforeUnmount(disposePresence)
+onBeforeUnmount(() => {
+  disposePresence()
+  removeThemeMediaListener?.()
+})
 </script>
 
 <template>
   <AuthView v-if="!session" />
-  <v-app v-else>
-    <v-app-bar density="compact" flat border>
-      <v-app-bar-title class="app-title">Whaler</v-app-bar-title>
-      <v-spacer />
-      <v-chip size="small" variant="tonal" prepend-icon="mdi-account-circle">
-        {{ currentUser.name }}
-      </v-chip>
-      <v-btn icon="mdi-logout" variant="text" title="Sign out" @click="signOut" />
-    </v-app-bar>
-
-    <v-navigation-drawer width="320" permanent border>
-      <div class="sidebar-section">
-        <v-select
-          v-model="selectedWorkspaceId"
-          :items="workspaces"
-          item-title="name"
-          item-value="id"
-          label="Workspace"
-          density="compact"
-          variant="outlined"
-          hide-details
-        />
-      </div>
-
-      <div class="sidebar-section workspace-create">
-        <v-text-field
-          v-model="newWorkspaceName"
-          label="Name"
-          density="compact"
-          variant="outlined"
-          hide-details
-        />
-        <v-select
-          v-model="selectedImageId"
-          :items="images"
-          item-title="label"
-          item-value="id"
-          label="Image"
-          density="compact"
-          variant="outlined"
-          hide-details
-        />
-        <v-btn
-          color="primary"
-          variant="flat"
-          size="small"
-          prepend-icon="mdi-plus"
-          :loading="creatingWorkspace"
-          @click="createWorkspace"
-        >
-          New
-        </v-btn>
-      </div>
-
-      <v-divider />
-
-      <div class="sidebar-section file-create">
-        <v-text-field
-          v-model="newPath"
-          label="Path"
-          density="compact"
-          variant="outlined"
-          hide-details
-        />
-        <v-btn
-          icon="mdi-file-plus-outline"
-          variant="tonal"
-          size="small"
-          title="Create file"
-          :loading="creatingFile"
-          :disabled="!selectedWorkspace"
-          @click="createFile"
-        />
-      </div>
-
-      <FileTree
-        :files="files"
-        :active-file-id="activeFile?.id ?? null"
-        :locations="presence"
-        @open="activeFile = $event"
-      />
-    </v-navigation-drawer>
-
-    <v-main>
-      <v-alert v-if="error" type="error" density="compact" variant="tonal" class="ma-3">
-        {{ error }}
-      </v-alert>
-      <div class="editor-shell">
-        <header class="editor-toolbar">
-          <div>
-            <strong>{{ activeFile?.path ?? "No file" }}</strong>
-            <span v-if="selectedWorkspace" class="muted">
-              {{ selectedWorkspace.imageRef }} · {{ selectedWorkspace.containerStatus }}
+  <v-app v-else class="app-shell">
+    <v-app-bar :height="mdAndUp ? 72 : 64" flat class="app-bar">
+      <v-app-bar-title>
+        <div class="app-bar-titleblock">
+          <div class="brand-mark">W</div>
+          <div class="app-title-copy">
+            <span class="app-title-text">Whaler</span>
+            <span class="app-page-title">
+              <v-icon :icon="activePageIcon" size="16" />
+              {{ activePageTitle }}
             </span>
           </div>
+        </div>
+      </v-app-bar-title>
+      <v-spacer />
+      <div class="app-bar-actions">
+        <v-chip class="theme-chip" size="small" variant="tonal" prepend-icon="mdi-palette-outline">
+          {{ effectiveThemeLabel }}
+        </v-chip>
+        <v-chip class="user-chip" size="small" variant="tonal" prepend-icon="mdi-account-circle">
+          {{ currentUser.name }}
+        </v-chip>
+        <v-btn icon="mdi-logout" variant="text" title="Sign out" @click="signOut" />
+      </div>
+    </v-app-bar>
+
+    <v-navigation-drawer :width="mdAndUp ? 88 : 72" permanent class="navigation-rail">
+      <div class="nav-rail-content">
+        <div class="nav-rail-items">
+          <nav>
+            <v-btn
+              class="nav-rail-button"
+              :class="{ 'nav-rail-button--active': activePage === 'workspace' }"
+              icon="mdi-file-code-outline"
+              variant="text"
+              title="Workspace"
+              @click="activePage = 'workspace'"
+            />
+          </nav>
+          <nav>
+            <v-btn
+              class="nav-rail-button"
+              :class="{ 'nav-rail-button--active': activePage === 'settings' }"
+              icon="mdi-cog-outline"
+              variant="text"
+              title="Settings"
+              @click="activePage = 'settings'"
+            />
+          </nav>
+        </div>
+      </div>
+    </v-navigation-drawer>
+
+    <v-navigation-drawer v-if="activePage === 'workspace' && mdAndUp" width="360" permanent class="material-drawer">
+      <div class="sidebar-content">
+        <div class="sidebar-section">
+          <div class="sidebar-heading">
+            <span class="sidebar-title">Workspace</span>
+            <v-chip
+              v-if="selectedWorkspace"
+              class="status-chip"
+              size="small"
+              variant="flat"
+              :prepend-icon="selectedWorkspaceStatusIcon"
+              :data-status="selectedWorkspace.containerStatus"
+            >
+              {{ selectedWorkspace.containerStatus }}
+            </v-chip>
+          </div>
+          <v-select
+            v-model="selectedWorkspaceId"
+            :items="workspaces"
+            item-title="name"
+            item-value="id"
+            label="Workspace"
+            density="comfortable"
+            variant="solo-filled"
+            prepend-inner-icon="mdi-view-dashboard-outline"
+            hide-details
+          />
+        </div>
+
+        <div class="sidebar-section workspace-create">
+          <div class="sidebar-heading">
+            <span class="sidebar-title">Create workspace</span>
+          </div>
+          <v-text-field
+            v-model="newWorkspaceName"
+            label="Name"
+            density="comfortable"
+            variant="solo-filled"
+            prepend-inner-icon="mdi-rename-outline"
+            hide-details
+          />
+          <v-select
+            v-model="selectedImageId"
+            :items="images"
+            item-title="label"
+            item-value="id"
+            label="Image"
+            density="comfortable"
+            variant="solo-filled"
+            prepend-inner-icon="mdi-cube-outline"
+            hide-details
+          />
+          <v-btn
+            color="primary"
+            variant="elevated"
+            size="large"
+            prepend-icon="mdi-plus"
+            :loading="creatingWorkspace"
+            @click="createWorkspace"
+          >
+            New
+          </v-btn>
+        </div>
+
+        <v-divider class="section-divider" />
+
+        <div class="sidebar-section">
+          <div class="sidebar-heading">
+            <span class="sidebar-title">Files</span>
+            <v-chip size="small" variant="tonal" prepend-icon="mdi-file-tree-outline">
+              {{ files.length }}
+            </v-chip>
+          </div>
+          <div class="file-create">
+            <v-text-field
+              v-model="newPath"
+              label="Path"
+              density="comfortable"
+              variant="solo-filled"
+              prepend-inner-icon="mdi-file-code-outline"
+              hide-details
+            />
+            <v-btn
+              icon="mdi-file-plus-outline"
+              color="primary"
+              variant="tonal"
+              size="large"
+              title="Create file"
+              :loading="creatingFile"
+              :disabled="!selectedWorkspace"
+              @click="createFile"
+            />
+          </div>
+        </div>
+
+        <FileTree
+          :files="files"
+          :active-file-id="activeFile?.id ?? null"
+          :locations="presence"
+          @open="activeFile = $event"
+        />
+      </div>
+    </v-navigation-drawer>
+
+    <v-main class="main-surface">
+      <v-alert v-if="error" type="error" density="comfortable" variant="tonal" class="error-banner">
+        {{ error }}
+      </v-alert>
+      <section v-if="activePage === 'workspace' && !mdAndUp" class="mobile-workspace-panel">
+        <div class="mobile-workspace-controls">
+          <v-select
+            v-model="selectedWorkspaceId"
+            :items="workspaces"
+            item-title="name"
+            item-value="id"
+            label="Workspace"
+            density="comfortable"
+            variant="solo-filled"
+            prepend-inner-icon="mdi-view-dashboard-outline"
+            hide-details
+          />
+          <div class="file-create">
+            <v-text-field
+              v-model="newPath"
+              label="Path"
+              density="comfortable"
+              variant="solo-filled"
+              prepend-inner-icon="mdi-file-code-outline"
+              hide-details
+            />
+            <v-btn
+              icon="mdi-file-plus-outline"
+              color="primary"
+              variant="tonal"
+              size="large"
+              title="Create file"
+              :loading="creatingFile"
+              :disabled="!selectedWorkspace"
+              @click="createFile"
+            />
+          </div>
+        </div>
+        <FileTree
+          :files="files"
+          :active-file-id="activeFile?.id ?? null"
+          :locations="presence"
+          @open="activeFile = $event"
+        />
+      </section>
+      <div
+        v-if="activePage === 'workspace'"
+        class="editor-shell"
+        :class="{ 'editor-shell--compact': !mdAndUp }"
+      >
+        <header class="editor-toolbar">
+          <div class="editor-title-row">
+            <v-icon class="editor-file-icon" icon="mdi-file-code-outline" size="24" />
+            <div class="editor-title-group">
+              <p class="editor-title">{{ activeFile?.path ?? "No file selected" }}</p>
+              <div v-if="selectedWorkspace" class="editor-meta">
+                <span class="muted">{{ selectedWorkspace.imageRef }}</span>
+                <v-chip
+                  class="status-chip"
+                  size="x-small"
+                  variant="flat"
+                  :prepend-icon="selectedWorkspaceStatusIcon"
+                  :data-status="selectedWorkspace.containerStatus"
+                >
+                  {{ selectedWorkspace.containerStatus }}
+                </v-chip>
+              </div>
+            </div>
+          </div>
+          <v-chip v-if="presence.length" size="small" variant="tonal" prepend-icon="mdi-account-multiple-outline">
+            {{ presence.length }}
+          </v-chip>
         </header>
         <CodeEditor :file="activeFile" :access-token="accessToken" :user="currentUser" />
       </div>
+      <section v-else class="settings-page">
+        <div class="settings-header">
+          <div>
+            <p class="settings-eyebrow">Settings</p>
+            <h1>Appearance</h1>
+          </div>
+          <v-chip size="small" variant="tonal" prepend-icon="mdi-theme-light-dark">
+            {{ effectiveThemeLabel }}
+          </v-chip>
+        </div>
+
+        <div class="settings-grid">
+          <section class="settings-card settings-card--wide">
+            <div class="settings-card-header">
+              <div class="settings-card-icon">
+                <v-icon icon="mdi-palette-outline" size="24" />
+              </div>
+              <div>
+                <h2>Theme</h2>
+                <p>{{ effectiveThemeLabel }}</p>
+              </div>
+            </div>
+
+            <div class="theme-options" role="radiogroup" aria-label="Theme">
+              <button
+                v-for="option in themeOptions"
+                :key="option.value"
+                class="theme-option"
+                :class="{ 'theme-option--selected': themePreference === option.value }"
+                type="button"
+                role="radio"
+                :aria-checked="themePreference === option.value"
+                @click="themePreference = option.value"
+              >
+                <span class="theme-preview" :data-preview="option.value">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span class="theme-option-body">
+                  <v-icon :icon="option.icon" size="22" />
+                  <span>{{ option.title }}</span>
+                </span>
+                <v-icon
+                  class="theme-option-check"
+                  :icon="themePreference === option.value ? 'mdi-check-circle' : 'mdi-circle-outline'"
+                  size="20"
+                />
+              </button>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-header">
+              <div class="settings-card-icon">
+                <v-icon icon="mdi-account-circle-outline" size="24" />
+              </div>
+              <div>
+                <h2>Account</h2>
+                <p>{{ currentUser.name }}</p>
+              </div>
+            </div>
+            <v-btn color="primary" variant="tonal" prepend-icon="mdi-logout" @click="signOut">
+              Sign out
+            </v-btn>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-header">
+              <div class="settings-card-icon">
+                <v-icon icon="mdi-view-dashboard-outline" size="24" />
+              </div>
+              <div>
+                <h2>Workspace</h2>
+                <p>{{ selectedWorkspace?.name ?? "No workspace" }}</p>
+              </div>
+            </div>
+            <v-btn color="primary" variant="tonal" prepend-icon="mdi-arrow-left" @click="activePage = 'workspace'">
+              Open workspace
+            </v-btn>
+          </section>
+        </div>
+      </section>
     </v-main>
   </v-app>
 </template>
+
+
+<style scoped>
+.nav-rail-items {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: min-content;
+  margin-inline: auto;
+  align-items: center;
+}
+</style>

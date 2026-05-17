@@ -6,7 +6,7 @@ import { javascript } from "@codemirror/lang-javascript"
 import { json } from "@codemirror/lang-json"
 import { python } from "@codemirror/lang-python"
 import { EditorState } from "@codemirror/state"
-import { EditorView, keymap, lineNumbers } from "@codemirror/view"
+import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
 import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language"
 import { HocuspocusProvider } from "@hocuspocus/provider"
@@ -80,6 +80,8 @@ async function mountEditor() {
       doc: "",
       extensions: [
         lineNumbers(),
+        highlightActiveLineGutter(),
+        highlightActiveLine(),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         bracketMatching(),
@@ -89,17 +91,30 @@ async function mountEditor() {
         EditorView.theme({
           "&": {
             height: "100%",
+            background: "var(--md-sys-color-surface-container-lowest)",
+            color: "var(--md-sys-color-on-surface)",
             fontSize: "14px"
           },
           ".cm-scroller": {
-            fontFamily: "'JetBrains Mono', 'SFMono-Regular', Consolas, monospace"
+            fontFamily: "'JetBrains Mono', 'SFMono-Regular', Consolas, monospace",
+            lineHeight: "1.55"
           },
           ".cm-content": {
-            padding: "16px 0"
+            caretColor: "var(--md-sys-color-primary)",
+            padding: "18px 0"
+          },
+          ".cm-line": {
+            padding: "0 18px"
           },
           ".cm-gutters": {
-            background: "#f6f8fa",
-            borderRight: "1px solid #d8dee4"
+            background: "var(--md-sys-color-surface-container-low)",
+            borderRight: "1px solid var(--md-sys-color-outline-variant)"
+          },
+          ".cm-activeLine, .cm-activeLineGutter": {
+            background: "color-mix(in srgb, var(--md-sys-color-primary-container) 42%, transparent)"
+          },
+          ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+            background: "color-mix(in srgb, var(--md-sys-color-primary) 24%, transparent)"
           }
         }),
         languageExtension(props.file.language, props.file.path),

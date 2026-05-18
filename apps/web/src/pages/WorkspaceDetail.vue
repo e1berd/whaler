@@ -7,9 +7,12 @@ import * as Y from "yjs"
 import type { AwarenessUser, FileLocation } from "@whaler/shared"
 import CodeEditor from "@/components/CodeEditor.vue"
 import FileTree from "@/components/FileTree.vue"
+import MediaPrepare from "@/components/MediaPrepare.vue"
+import MembersPanel from "@/components/MembersPanel.vue"
 import Splitter from "@/components/Splitter.vue"
 import { collabUrl } from "@/lib/config"
 import { client, handleUnauthorizedResponse, useSession } from "@/lib/session"
+import { useVoice } from "@/lib/voice/composable"
 
 type WorkspaceDetail = {
   id: string
@@ -105,9 +108,90 @@ function presenceLabel(entry: PresenceEntry): string {
   return entry.location?.path ? `${entry.user.name} • ${entry.location.path}` : entry.user.name
 }
 
-const micMuted = ref(false)
-const deafened = ref(false)
-const voiceConnected = ref(false)
+const voice = useVoice({ workspaceId, accessToken })
+const micMuted = computed(() => voice.micMuted.value)
+const deafened = computed(() => voice.deafened.value)
+const voiceStateLabel = computed(() => {
+  if (voice.micPublishing.value && !voice.micMuted.value) return "Speaking"
+  if (voice.connected.value && !voice.deafened.value) return "Listening"
+  if (voice.connected.value) return "Voice ready"
+  return "Voice idle"
+})
+
+const voiceStateByUserId = computed<Record<string, {
+  micMuted: boolean
+  deafened: boolean
+  volume: number
+  connected: boolean
+}>>(() => {
+  const map: Record<string, { micMuted: boolean; deafened: boolean; volume: number; connected: boolean }> = {}
+  for (const peer of voice.peers.value) {
+    map[peer.userId] = {
+      micMuted: peer.micMuted,
+      deafened: peer.deafened,
+      volume: peer.volume,
+      connected: true
+    }
+  }
+  if (currentUser.value.id) {
+    map[currentUser.value.id] = {
+      micMuted: voice.micMuted.value,
+      deafened: voice.deafened.value,
+      volume: 0,
+      connected: voice.connected.value
+    }
+  }
+  return map
+})
+const mediaPrepareOpen = ref(false)
+const mediaPreparePendingMic = ref(false)
+
+function permissionAlreadyGranted(): boolean {
+  return localStorage.getItem("whaler.voice.input") !== null
+}
+
+async function handleMicToggle(): Promise<void> {
+  if (!voice.micPublishing.value && !permissionAlreadyGranted()) {
+    mediaPreparePendingMic.value = true
+    mediaPrepareOpen.value = true
+    return
+  }
+  try {
+    await voice.toggleMicMute()
+  } catch {
+    mediaPreparePendingMic.value = true
+    mediaPrepareOpen.value = true
+  }
+}
+
+async function handleDeafenToggle(): Promise<void> {
+  await voice.toggleDeafen()
+}
+
+function openAudioSettings(): void {
+  mediaPreparePendingMic.value = false
+  mediaPrepareOpen.value = true
+}
+
+async function onMediaPrepareConfirm(payload: { inputDeviceId: string | null; outputDeviceId: string | null }): Promise<void> {
+  voice.setInputDevice(payload.inputDeviceId)
+  await voice.setOutputDevice(payload.outputDeviceId)
+  if (mediaPreparePendingMic.value) {
+    mediaPreparePendingMic.value = false
+    try {
+      await voice.enableMic()
+    } catch {
+      // error already surfaced via voice.error
+    }
+  }
+}
+
+const sidebarSplitPercent = ref(65)
+const membersCollapsed = computed(() => sidebarSplitPercent.value >= 92)
+
+function onSidebarSplitChange(value: number) {
+  sidebarSplitPercent.value = value
+}
 
 const appBarReady = ref(false)
 onMounted(() => {
@@ -373,7 +457,14 @@ onBeforeUnmount(disposePresence)
     >
       <template #start>
         <aside class="detail-sidebar">
-          <Splitter direction="vertical" :initial="65" :min="25" :max="85" storage-key="whaler.sidebar-split">
+          <Splitter
+        direction="vertical"
+        :initial="65"
+        :min="0"
+        :max="100"
+        storage-key="whaler.sidebar-split"
+        @update:percent="onSidebarSplitChange"
+      >
         <template #start>
           <section class="sidebar-panel sidebar-panel--files">
             <header class="panel-heading">
@@ -411,29 +502,27 @@ onBeforeUnmount(disposePresence)
         </template>
 
         <template #end>
-          <section class="sidebar-panel sidebar-panel--members">
-            <header class="panel-heading">
-              <span class="panel-title">Online — {{ presenceList.length }}</span>
-            </header>
-            <ul class="member-list">
-              <li v-for="entry in presenceList" :key="entry.user.id" class="member-row" :title="presenceLabel(entry)">
-                <div class="member-avatar-wrap">
-                  <span class="member-avatar" :style="{ backgroundColor: entry.user.color }">
-                    <img v-if="entry.user.avatarUrl" :src="entry.user.avatarUrl" :alt="entry.user.name" />
-                    <template v-else>{{ entry.user.name.charAt(0).toUpperCase() }}</template>
-                  </span>
-                  <span class="member-status-dot" />
-                </div>
-                <div class="member-text">
-                  <span class="member-name">{{ entry.user.name }}</span>
-                  <span class="member-activity">{{ entry.location?.path ?? "Idle" }}</span>
-                </div>
-              </li>
-              <li v-if="!presenceList.length" class="member-empty">No one else is here.</li>
-            </ul>
-          </section>
+          <MembersPanel
+            v-if="!membersCollapsed"
+            :presence-list="presenceList"
+            :presence-label="presenceLabel"
+            :voice-state-by-user-id="voiceStateByUserId"
+          />
         </template>
       </Splitter>
+
+      <div v-if="membersCollapsed" class="members-floating">
+        <div class="members-floating-handle">
+          <v-icon icon="mdi-chevron-up" size="14" />
+          Online — {{ presenceList.length }}
+        </div>
+        <MembersPanel
+          class="members-floating-panel"
+          :presence-list="presenceList"
+          :presence-label="presenceLabel"
+          :voice-state-by-user-id="voiceStateByUserId"
+        />
+      </div>
 
       <footer class="voice-bar">
         <div class="voice-bar-identity">
@@ -443,11 +532,11 @@ onBeforeUnmount(disposePresence)
           </span>
           <div class="voice-bar-text">
             <span class="voice-bar-name">{{ currentUser.name }}</span>
-            <span class="voice-bar-state">{{ voiceConnected ? "Voice ready" : "Voice idle" }}</span>
+            <span class="voice-bar-state">{{ voiceStateLabel }}</span>
           </div>
         </div>
         <div class="voice-bar-actions">
-          <v-tooltip location="top" :text="micMuted ? 'Unmute' : 'Mute'">
+          <v-tooltip location="top" :text="micMuted ? 'Enable microphone' : 'Mute microphone'">
             <template #activator="{ props: tooltipProps }">
               <v-btn
                 v-bind="tooltipProps"
@@ -457,11 +546,11 @@ onBeforeUnmount(disposePresence)
                 variant="text"
                 density="comfortable"
                 size="small"
-                @click="micMuted = !micMuted"
+                @click="handleMicToggle"
               />
             </template>
           </v-tooltip>
-          <v-tooltip location="top" :text="deafened ? 'Undeafen' : 'Deafen'">
+          <v-tooltip location="top" :text="deafened ? 'Enable speakers' : 'Mute speakers'">
             <template #activator="{ props: tooltipProps }">
               <v-btn
                 v-bind="tooltipProps"
@@ -471,20 +560,20 @@ onBeforeUnmount(disposePresence)
                 variant="text"
                 density="comfortable"
                 size="small"
-                @click="deafened = !deafened"
+                @click="handleDeafenToggle"
               />
             </template>
           </v-tooltip>
-          <v-tooltip location="top" text="Audio settings">
+          <v-tooltip location="top" text="Audio devices">
             <template #activator="{ props: tooltipProps }">
               <v-btn
                 v-bind="tooltipProps"
                 class="voice-btn"
-                icon="mdi-cog-outline"
+                icon="mdi-tune-vertical"
                 variant="text"
                 density="comfortable"
                 size="small"
-                @click="router.push('settings')"
+                @click="openAudioSettings"
               />
             </template>
           </v-tooltip>
@@ -592,6 +681,23 @@ onBeforeUnmount(disposePresence)
       </div>
     </main>
 
+    <MediaPrepare
+      v-model="mediaPrepareOpen"
+      :initial-input-device-id="voice.inputDeviceId.value"
+      :initial-output-device-id="voice.outputDeviceId.value"
+      @confirm="onMediaPrepareConfirm"
+    />
+
+    <v-snackbar
+      :model-value="!!voice.error.value"
+      color="error"
+      location="bottom right"
+      timeout="4000"
+      @update:model-value="(value: boolean) => { if (!value) voice.error.value = null }"
+    >
+      {{ voice.error.value }}
+    </v-snackbar>
+
     <v-dialog :model-value="!!createDialog" max-width="420" @update:model-value="(value) => !value && (createDialog = null)">
       <v-card v-if="createDialog" rounded="xl">
         <v-card-title>
@@ -656,6 +762,7 @@ onBeforeUnmount(disposePresence)
   background: var(--md-sys-color-surface-container-low);
   border-right: 1px solid var(--md-sys-color-outline-variant);
   min-height: 0;
+  position: relative;
   overflow: hidden;
 }
 
@@ -734,11 +841,6 @@ onBeforeUnmount(disposePresence)
   gap: 6px;
 }
 
-.sidebar-panel--members {
-  gap: 6px;
-  padding-top: 4px;
-}
-
 .panel-heading {
   display: flex;
   align-items: center;
@@ -760,100 +862,59 @@ onBeforeUnmount(disposePresence)
   gap: 4px;
 }
 
-.member-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  flex: 1;
-  overflow-y: auto;
+.members-floating {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  height: 86px;
+  padding: 6px 14px 0;
+  background: var(--md-sys-color-surface-container-low);
+  border-top: 1px solid var(--md-sys-color-outline-variant);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  opacity: 0.55;
+  overflow: hidden;
+  cursor: default;
+  transition: height 280ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease;
 }
 
-.member-row {
+.members-floating:hover {
+  height: 320px;
+  opacity: 1;
+}
+
+.members-floating-handle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  cursor: default;
-  min-height: 38px;
-  transition: background 120ms cubic-bezier(0.2, 0, 0, 1);
-}
-
-.member-row:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
-}
-
-.member-avatar-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.member-avatar {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  overflow: hidden;
-  color: #fff;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.member-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.member-status-dot {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #4ade80;
-  border: 2px solid var(--md-sys-color-surface-container-low);
-  box-sizing: content-box;
-}
-
-.member-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.member-name {
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--md-sys-color-on-surface);
-}
-
-.member-activity {
+  gap: 4px;
+  padding: 2px 4px 4px;
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--md-sys-color-on-surface-variant);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
-.member-empty {
-  list-style: none;
-  font-size: 12px;
-  color: var(--md-sys-color-on-surface-variant);
-  padding: 8px 8px;
+.members-floating-handle :deep(.v-icon) {
+  opacity: 0.6;
+  transition: transform 260ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.members-floating:hover .members-floating-handle :deep(.v-icon) {
+  transform: rotate(180deg);
+}
+
+.members-floating-panel {
+  flex: 1;
+  min-height: 0;
 }
 
 .voice-bar {
+  position: relative;
+  z-index: 6;
   display: flex;
   align-items: center;
   gap: 8px;

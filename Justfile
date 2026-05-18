@@ -6,8 +6,17 @@ default:
 install:
     pnpm install
 
-dev:
+dev: turn-up
     pnpm dev
+
+turn-up:
+    docker compose --profile turn up -d coturn
+
+turn-down:
+    docker compose --profile turn down
+
+turn-logs:
+    docker compose --profile turn logs -f coturn
 
 
 dev-web:
@@ -18,6 +27,9 @@ dev-api:
 
 dev-collab:
     pnpm --filter @whaler/collab dev
+
+dev-voice:
+    pnpm --filter @whaler/voice dev
 
 dev-runner:
     pnpm --filter @whaler/runner dev

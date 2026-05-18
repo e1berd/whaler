@@ -12,3 +12,14 @@ export function collabUrl(): string {
 
   return `${protocol}//${window.location.host}/collab`
 }
+
+export function voiceUrl(): string {
+  const configured = import.meta.env.VITE_VOICE_URL
+  if (configured) return configured
+
+  if (typeof window === "undefined") return "ws://localhost:3003"
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+  if (window.location.port === "5173") return "ws://localhost:3003"
+
+  return `${protocol}//${window.location.host}/voice`
+}

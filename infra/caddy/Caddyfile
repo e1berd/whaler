@@ -11,7 +11,7 @@
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Permissions-Policy "camera=(), microphone=(self), geolocation=()"
 	}
 
 	reverse_proxy web:80
@@ -31,6 +31,11 @@
 {$COLLAB_DOMAIN} {
 	encode zstd gzip
 	reverse_proxy collab:3001
+}
+
+{$VOICE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy voice:3003
 }
 
 {$SUPABASE_DOMAIN} {

@@ -19,6 +19,10 @@ const props = withDefaults(
   }
 )
 
+const emit = defineEmits<{
+  "update:percent": [value: number]
+}>()
+
 const containerRef = ref<HTMLElement | null>(null)
 const isResizing = ref(false)
 
@@ -76,12 +80,14 @@ function startResize(event: PointerEvent) {
 }
 
 watch(percent, (value) => {
+  emit("update:percent", value)
   if (typeof window !== "undefined" && props.storageKey) {
     window.localStorage.setItem(props.storageKey, String(value))
   }
 })
 
 onMounted(() => {
+  emit("update:percent", percent.value)
   window.addEventListener("pointermove", onPointerMove)
   window.addEventListener("pointerup", stopResize)
 })
@@ -153,6 +159,7 @@ onBeforeUnmount(() => {
 .splitter--vertical > .splitter-handle {
   height: 8px;
   cursor: row-resize;
+  z-index: 8;
 }
 
 .splitter--horizontal > .splitter-handle {

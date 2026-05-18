@@ -34,6 +34,45 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
+  voice:
+    build:
+      context: .
+      dockerfile: apps/voice/Dockerfile
+    environment:
+      NODE_ENV: production
+      VOICE_PORT: 3003
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgres://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SUPABASE_URL: ${SUPABASE_URL_DOCKER:-http://host.docker.internal:54321}
+      MEDIASOUP_LISTEN_IP: 0.0.0.0
+      MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      MEDIASOUP_RTC_MIN_PORT: ${MEDIASOUP_RTC_MIN_PORT:-40000}
+      MEDIASOUP_RTC_MAX_PORT: ${MEDIASOUP_RTC_MAX_PORT:-40100}
+      STUN_URL: ${STUN_URL:-stun:stun.l.google.com:19302}
+      TURN_URL: ${TURN_URL:-}
+      TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+      TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-3600}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${MEDIASOUP_RTC_MIN_PORT:-40000}-${MEDIASOUP_RTC_MAX_PORT:-40100}:40000-40100/udp"
+      - "${MEDIASOUP_RTC_MIN_PORT:-40000}-${MEDIASOUP_RTC_MAX_PORT:-40100}:40000-40100/tcp"
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:4.6
+    profiles: ["turn"]
+    network_mode: host
+    entrypoint: ["turnserver"]
+    command:
+      - "-c"
+      - "/etc/coturn/turnserver.conf"
+      - "--realm=${TURN_REALM:-whaler}"
+      - "--static-auth-secret=${TURN_STATIC_SECRET:?TURN_STATIC_SECRET is required when running the turn profile}"
+    volumes:
+      - ./infra/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    restart: unless-stopped
+
   runner:
     build:
       context: .
@@ -57,6 +96,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
         VITE_COLLAB_URL: ${VITE_COLLAB_URL:-ws://localhost:3001}
+        VITE_VOICE_URL: ${VITE_VOICE_URL:-ws://localhost:3003}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://127.0.0.1:54321}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
     restart: unless-stopped
@@ -67,6 +107,7 @@ services:
       APP_DOMAIN: ${APP_DOMAIN:-localhost}
       API_DOMAIN: ${API_DOMAIN:-api.localhost}
       COLLAB_DOMAIN: ${COLLAB_DOMAIN:-collab.localhost}
+      VOICE_DOMAIN: ${VOICE_DOMAIN:-voice.localhost}
       SUPABASE_DOMAIN: ${SUPABASE_DOMAIN:-supabase.localhost}
       CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
       SUPABASE_UPSTREAM: ${SUPABASE_UPSTREAM:-host.docker.internal:54321}
@@ -83,6 +124,7 @@ services:
     depends_on:
       - api
       - collab
+      - voice
       - web
     restart: unless-stopped
 

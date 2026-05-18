@@ -35,6 +35,7 @@ export const profiles = pgTable("profiles", {
   email: text("email"),
   displayName: text("display_name"),
   color: text("color").notNull(),
+  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 })
@@ -47,6 +48,8 @@ export const workspaces = pgTable(
     name: text("name").notNull(),
     imageId: text("image_id").notNull(),
     imageRef: text("image_ref").notNull(),
+    visibility: text("visibility").default("public").notNull().$type<"public" | "protected">(),
+    passwordHash: text("password_hash"),
     containerId: text("container_id"),
     containerStatus: containerStatus("container_status").default("pending").notNull(),
     containerError: text("container_error"),
@@ -55,7 +58,8 @@ export const workspaces = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => ({
-    ownerIdx: index("workspaces_owner_idx").on(table.ownerId)
+    ownerIdx: index("workspaces_owner_idx").on(table.ownerId),
+    visibilityIdx: index("workspaces_visibility_idx").on(table.visibility)
   })
 )
 

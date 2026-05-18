@@ -1,9 +1,33 @@
+import { randomBytes, scrypt, timingSafeEqual } from "node:crypto"
+import { promisify } from "node:util"
 import { and, eq } from "drizzle-orm"
 import { HTTPException } from "hono/http-exception"
 import { collabDocuments, files, workspaceMembers, workspaces } from "@whaler/db/schema"
 import { getSandboxImage, normalizeWorkspacePath } from "@whaler/shared"
 import { db } from "./db"
 import type { AuthUser } from "./auth"
+
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number
+) => Promise<Buffer>
+
+export async function hashWorkspacePassword(password: string): Promise<string> {
+  const salt = randomBytes(16)
+  const derived = await scryptAsync(password, salt, 64)
+  return `scrypt$${salt.toString("hex")}$${derived.toString("hex")}`
+}
+
+export async function verifyWorkspacePassword(password: string, hash: string): Promise<boolean> {
+  const parts = hash.split("$")
+  if (parts.length !== 3 || parts[0] !== "scrypt") return false
+  const salt = Buffer.from(parts[1] ?? "", "hex")
+  const expected = Buffer.from(parts[2] ?? "", "hex")
+  if (!salt.length || !expected.length) return false
+  const derived = await scryptAsync(password, salt, expected.length)
+  return derived.length === expected.length && timingSafeEqual(derived, expected)
+}
 
 export async function assertWorkspaceAccess(workspaceId: string, user: AuthUser) {
   const [member] = await db
@@ -72,11 +96,15 @@ export async function createWorkspaceWithDefaults(input: {
   user: AuthUser
   name: string
   imageId: string
+  password?: string | null
 }) {
   const image = getSandboxImage(input.imageId)
   if (!image) {
     throw new HTTPException(400, { message: "Image is not allowlisted" })
   }
+
+  const password = input.password?.trim() || null
+  const passwordHash = password ? await hashWorkspacePassword(password) : null
 
   const now = new Date()
   return db.transaction(async (tx) => {
@@ -87,6 +115,8 @@ export async function createWorkspaceWithDefaults(input: {
         name: input.name,
         imageId: image.id,
         imageRef: image.image,
+        visibility: password ? "protected" : "public",
+        passwordHash,
         containerStatus: "starting",
         updatedAt: now
       })
@@ -109,20 +139,6 @@ export async function createWorkspaceWithDefaults(input: {
         kind: "file",
         language: "markdown",
         content: `# ${input.name}\n\nWorkspace image: ${image.image}\n`
-      },
-      {
-        workspaceId: workspace.id,
-        path: "src",
-        kind: "directory",
-        language: null,
-        content: ""
-      },
-      {
-        workspaceId: workspace.id,
-        path: "src/main.ts",
-        kind: "file",
-        language: "typescript",
-        content: "console.log('hello from whaler')\n"
       }
     ])
 

@@ -1,24 +1,34 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue"
+import { nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
 import { css } from "@codemirror/lang-css"
 import { html } from "@codemirror/lang-html"
 import { javascript } from "@codemirror/lang-javascript"
 import { json } from "@codemirror/lang-json"
 import { python } from "@codemirror/lang-python"
-import { EditorState } from "@codemirror/state"
+import { Compartment, EditorState } from "@codemirror/state"
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
-import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language"
+import { bracketMatching, indentOnInput } from "@codemirror/language"
 import { HocuspocusProvider } from "@hocuspocus/provider"
 import { yCollab } from "y-codemirror.next"
 import * as Y from "yjs"
 import type { AwarenessUser } from "@whaler/shared"
 import { collabUrl } from "@/lib/config"
+import { editorBaseTheme, editorHighlight } from "@/lib/editor-theme"
+import { effectiveThemeName } from "@/lib/theme"
+import RemoteCursorLabel from "@/components/RemoteCursorLabel.vue"
 
 type WorkspaceFile = {
   id: string
   path: string
   language: string | null
+}
+
+type RemoteCursor = {
+  clientId: number
+  pos: number
+  name: string
+  color: string
 }
 
 const props = defineProps<{
@@ -28,9 +38,18 @@ const props = defineProps<{
 }>()
 
 const host = ref<HTMLElement | null>(null)
-let view: EditorView | null = null
+const view = shallowRef<EditorView | null>(null)
+const remoteCursors = ref<RemoteCursor[]>([])
+
 let provider: HocuspocusProvider | null = null
 let ydoc: Y.Doc | null = null
+let removeAwarenessListener: (() => void) | null = null
+const themeCompartment = new Compartment()
+const highlightCompartment = new Compartment()
+
+function modeFromTheme(themeName: string): "light" | "dark" {
+  return themeName === "whalerDark" ? "dark" : "light"
+}
 
 function languageExtension(language: string | null, path: string) {
   if (language === "typescript") return javascript({ typescript: true })
@@ -44,13 +63,45 @@ function languageExtension(language: string | null, path: string) {
   return []
 }
 
+function recomputeRemoteCursors() {
+  if (!provider || !ydoc) return
+  const ytext = ydoc.getText("content")
+  const next: RemoteCursor[] = []
+  const states = provider.awareness?.getStates()
+  if (!states) {
+    remoteCursors.value = []
+    return
+  }
+  for (const [clientId, state] of states) {
+    if (clientId === provider.awareness?.clientID) continue
+    const cursor = state?.cursor
+    const userInfo = state?.user
+    if (!cursor || !userInfo || !cursor.head) continue
+    const absolute = Y.createAbsolutePositionFromRelativePosition(
+      Y.createRelativePositionFromJSON(cursor.head),
+      ydoc
+    )
+    if (!absolute || absolute.type !== ytext) continue
+    next.push({
+      clientId,
+      pos: absolute.index,
+      name: userInfo.name ?? "Anonymous",
+      color: userInfo.color ?? "#2563eb"
+    })
+  }
+  remoteCursors.value = next
+}
+
 function dispose() {
-  view?.destroy()
+  removeAwarenessListener?.()
+  removeAwarenessListener = null
+  view.value?.destroy()
   provider?.destroy()
   ydoc?.destroy()
-  view = null
+  view.value = null
   provider = null
   ydoc = null
+  remoteCursors.value = []
 }
 
 async function mountEditor() {
@@ -74,7 +125,7 @@ async function mountEditor() {
   const ytext = ydoc.getText("content")
   const undoManager = new Y.UndoManager(ytext)
 
-  view = new EditorView({
+  view.value = new EditorView({
     parent: host.value,
     state: EditorState.create({
       doc: "",
@@ -86,42 +137,27 @@ async function mountEditor() {
         keymap.of([...defaultKeymap, ...historyKeymap]),
         bracketMatching(),
         indentOnInput(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        highlightCompartment.of(editorHighlight(modeFromTheme(effectiveThemeName.value))),
         EditorView.lineWrapping,
-        EditorView.theme({
-          "&": {
-            height: "100%",
-            background: "var(--md-sys-color-surface-container-lowest)",
-            color: "var(--md-sys-color-on-surface)",
-            fontSize: "14px"
-          },
-          ".cm-scroller": {
-            fontFamily: "'JetBrains Mono', 'SFMono-Regular', Consolas, monospace",
-            lineHeight: "1.55"
-          },
-          ".cm-content": {
-            caretColor: "var(--md-sys-color-primary)",
-            padding: "18px 0"
-          },
-          ".cm-line": {
-            padding: "0 18px"
-          },
-          ".cm-gutters": {
-            background: "var(--md-sys-color-surface-container-low)",
-            borderRight: "1px solid var(--md-sys-color-outline-variant)"
-          },
-          ".cm-activeLine, .cm-activeLineGutter": {
-            background: "color-mix(in srgb, var(--md-sys-color-primary-container) 42%, transparent)"
-          },
-          ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-            background: "color-mix(in srgb, var(--md-sys-color-primary) 24%, transparent)"
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged || update.viewportChanged || update.geometryChanged) {
+            recomputeRemoteCursors()
           }
         }),
+        themeCompartment.of(editorBaseTheme(modeFromTheme(effectiveThemeName.value))),
         languageExtension(props.file.language, props.file.path),
         yCollab(ytext, provider.awareness, { undoManager })
       ]
     })
   })
+
+  const awareness = provider.awareness
+  if (awareness) {
+    const awarenessListener = () => recomputeRemoteCursors()
+    awareness.on("change", awarenessListener)
+    removeAwarenessListener = () => awareness.off("change", awarenessListener)
+  }
+  recomputeRemoteCursors()
 }
 
 watch(() => props.file?.id, mountEditor, { immediate: true })
@@ -130,14 +166,49 @@ watch(
   () => provider?.setAwarenessField("user", props.user),
   { deep: true }
 )
+watch(effectiveThemeName, (themeName) => {
+  if (!view.value) return
+  const mode = modeFromTheme(themeName)
+  view.value.dispatch({
+    effects: [
+      themeCompartment.reconfigure(editorBaseTheme(mode)),
+      highlightCompartment.reconfigure(editorHighlight(mode))
+    ]
+  })
+})
 
 onBeforeUnmount(dispose)
 </script>
 
 <template>
-  <div v-if="file" ref="host" class="editor-host" />
+  <div v-if="file" class="editor-host-frame">
+    <div ref="host" class="editor-host" />
+    <template v-if="view">
+      <RemoteCursorLabel
+        v-for="cursor in remoteCursors"
+        :key="cursor.clientId"
+        :view="view"
+        :pos="cursor.pos"
+        :name="cursor.name"
+        :color="cursor.color"
+      />
+    </template>
+  </div>
   <div v-else class="editor-empty">
     <v-icon icon="mdi-file-code-outline" size="40" />
     <span>Select a file</span>
   </div>
 </template>
+
+<style scoped>
+.editor-host-frame {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+.editor-host {
+  position: absolute;
+  inset: 0;
+}
+</style>

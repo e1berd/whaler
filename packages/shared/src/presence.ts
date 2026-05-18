@@ -3,6 +3,7 @@ export type AwarenessUser = {
   name: string
   email?: string
   color: string
+  avatarUrl?: string
 }
 
 export type FileLocation = {

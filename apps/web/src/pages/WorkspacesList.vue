@@ -154,12 +154,20 @@ onMounted(() => {
 
 <template>
   <section class="workspaces-page">
-    <header class="workspaces-header">
+    <header class="workspaces-hero">
       <div class="workspaces-title">
-        <h1>Workspaces</h1>
-        <p>Public rooms — join any project to collaborate in realtime.</p>
+        <p class="workspaces-eyebrow">Workspaces</p>
+        <h1>Pick a sandbox &amp; jump in</h1>
+        <p class="workspaces-sub">Public rooms — join any project to collaborate in realtime.</p>
       </div>
-      <v-btn color="primary" variant="elevated" prepend-icon="mdi-plus" size="large" @click="router.push('workspace-create')">
+      <v-btn
+        class="workspaces-cta"
+        color="primary"
+        variant="elevated"
+        prepend-icon="mdi-plus"
+        size="large"
+        @click="router.push('workspace-create')"
+      >
         New workspace
       </v-btn>
     </header>
@@ -167,7 +175,7 @@ onMounted(() => {
     <div class="workspaces-filters">
       <v-text-field
         v-model="query"
-        label="Search"
+        label="Search workspaces"
         density="comfortable"
         variant="solo-filled"
         prepend-inner-icon="mdi-magnify"
@@ -209,44 +217,50 @@ onMounted(() => {
         v-for="workspace in filteredItems"
         :key="workspace.id"
         class="workspace-card"
-        :class="{ 'workspace-card--joining': joining === workspace.id }"
+        :class="{ 'workspace-card--joining': joining === workspace.id, 'workspace-card--joined': workspace.isMember }"
         tabindex="0"
         role="button"
         @click="onWorkspaceClick(workspace)"
         @keydown.enter="onWorkspaceClick(workspace)"
       >
-        <div class="workspace-card-head">
-          <div class="workspace-card-icon">
-            <v-icon icon="mdi-cube-outline" />
+        <div class="workspace-card-body">
+          <div class="workspace-card-head">
+            <div class="workspace-card-icon">
+              <v-icon icon="mdi-cube-outline" size="20" />
+            </div>
+            <div class="workspace-card-title">
+              <h2>{{ workspace.name }}</h2>
+              <span class="workspace-card-image">{{ imageLabel(workspace.imageId) }}</span>
+            </div>
+            <v-icon
+              v-if="workspace.hasPassword"
+              class="workspace-lock"
+              icon="mdi-lock-outline"
+              size="18"
+              :title="workspace.isMember ? 'Joined' : 'Password protected'"
+            />
           </div>
-          <div class="workspace-card-title">
-            <h2>{{ workspace.name }}</h2>
-            <span class="workspace-card-image">{{ imageLabel(workspace.imageId) }}</span>
+          <div class="workspace-card-meta">
+            <v-chip
+              class="status-chip"
+              size="x-small"
+              variant="flat"
+              :prepend-icon="statusIcon(workspace.containerStatus)"
+              :data-status="workspace.containerStatus"
+            >
+              {{ workspace.containerStatus }}
+            </v-chip>
+            <v-chip size="x-small" variant="tonal" prepend-icon="mdi-account-multiple-outline">
+              {{ workspace.memberCount }}
+            </v-chip>
+            <v-chip v-if="workspace.isMember" size="x-small" variant="tonal" prepend-icon="mdi-check">
+              Joined
+            </v-chip>
           </div>
-          <v-icon
-            v-if="workspace.hasPassword"
-            class="workspace-lock"
-            icon="mdi-lock-outline"
-            size="20"
-            :title="workspace.isMember ? 'Joined' : 'Password protected'"
-          />
         </div>
-        <div class="workspace-card-meta">
-          <v-chip
-            class="status-chip"
-            size="x-small"
-            variant="flat"
-            :prepend-icon="statusIcon(workspace.containerStatus)"
-            :data-status="workspace.containerStatus"
-          >
-            {{ workspace.containerStatus }}
-          </v-chip>
-          <v-chip size="x-small" variant="tonal" prepend-icon="mdi-account-multiple-outline">
-            {{ workspace.memberCount }}
-          </v-chip>
-          <v-chip v-if="workspace.isMember" size="x-small" variant="tonal" prepend-icon="mdi-check">
-            Joined
-          </v-chip>
+        <div class="workspace-card-cta">
+          <span>{{ workspace.isMember ? "Open workspace" : workspace.hasPassword ? "Enter password" : "Join workspace" }}</span>
+          <v-icon icon="mdi-arrow-right" size="18" />
         </div>
       </article>
     </div>
@@ -296,31 +310,55 @@ onMounted(() => {
 .workspaces-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 28px 32px;
+  gap: 22px;
+  padding: 24px 28px 40px;
   max-width: 1180px;
   margin: 0 auto;
   width: 100%;
 }
 
-.workspaces-header {
+.workspaces-hero {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 16px;
+  gap: 18px;
   flex-wrap: wrap;
+  padding: 4px 4px 4px;
+}
+
+.workspaces-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.workspaces-eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .workspaces-title h1 {
   margin: 0;
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: clamp(24px, 3vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--md-sys-color-on-surface);
 }
 
-.workspaces-title p {
-  margin: 4px 0 0;
+.workspaces-sub {
+  margin: 8px 0 0;
   color: var(--md-sys-color-on-surface-variant);
+  font-size: 14px;
+  max-width: 50ch;
+}
+
+.workspaces-cta {
+  position: relative;
+  z-index: 1;
 }
 
 .workspaces-filters {
@@ -346,39 +384,51 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 48px 0;
+  padding: 56px 0;
   color: var(--md-sys-color-on-surface-variant);
+  border: 1px dashed var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-extra-large);
+  background: var(--md-sys-color-surface-container-lowest);
 }
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
 .workspace-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-  background: var(--md-sys-color-surface-container);
+  background: var(--md-sys-color-surface-container-lowest);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-large);
+  overflow: hidden;
   cursor: pointer;
-  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1), box-shadow 160ms cubic-bezier(0.2, 0, 0, 1), border-color 160ms;
+  text-align: left;
+  transition:
+    border-color var(--md-sys-motion),
+    box-shadow var(--md-sys-motion);
 }
 
 .workspace-card:hover,
 .workspace-card:focus-visible {
-  transform: translateY(-2px);
-  border-color: var(--md-sys-color-primary);
-  box-shadow: var(--md-sys-elevation-2);
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--md-sys-elevation-1);
   outline: none;
 }
 
 .workspace-card--joining {
   opacity: 0.7;
   pointer-events: none;
+}
+
+.workspace-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 16px;
 }
 
 .workspace-card-head {
@@ -393,6 +443,12 @@ onMounted(() => {
   border-radius: 12px;
   display: grid;
   place-items: center;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface-variant);
+  flex-shrink: 0;
+}
+
+.workspace-card--joined .workspace-card-icon {
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
 }
@@ -405,7 +461,9 @@ onMounted(() => {
 .workspace-card-title h2 {
   margin: 0;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--md-sys-color-on-surface);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -426,14 +484,28 @@ onMounted(() => {
   gap: 6px;
 }
 
-.status-chip[data-status="running"] {
-  background: var(--md-sys-color-success-container);
-  color: var(--md-sys-color-on-success-container);
+.workspace-card-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 20px;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-low);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: color var(--md-sys-motion);
 }
 
-.status-chip[data-status="error"] {
-  background: var(--md-sys-color-error-container);
-  color: var(--md-sys-color-on-error-container);
+.workspace-card:hover .workspace-card-cta,
+.workspace-card:focus-visible .workspace-card-cta {
+  color: var(--md-sys-color-primary);
+}
+
+.workspace-card:hover .workspace-card-cta .v-icon,
+.workspace-card:focus-visible .workspace-card-cta .v-icon {
+  transform: translateX(2px);
+  transition: transform var(--md-sys-motion);
 }
 
 .error-banner {

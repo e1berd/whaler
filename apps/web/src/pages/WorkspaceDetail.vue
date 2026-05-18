@@ -9,6 +9,7 @@ import CodeEditor from "@/components/CodeEditor.vue"
 import FileTree from "@/components/FileTree.vue"
 import MediaPrepare from "@/components/MediaPrepare.vue"
 import MembersPanel from "@/components/MembersPanel.vue"
+import PreviewPanel from "@/components/PreviewPanel.vue"
 import Splitter from "@/components/Splitter.vue"
 import { collabUrl } from "@/lib/config"
 import { client, handleUnauthorizedResponse, useSession } from "@/lib/session"
@@ -640,7 +641,9 @@ onBeforeUnmount(disposePresence)
         <main class="detail-editor">
           <header class="editor-toolbar">
             <div class="editor-title-row">
-              <v-icon class="editor-file-icon" icon="mdi-file-code-outline" size="24" />
+              <div class="editor-file-pill">
+                <v-icon class="editor-file-icon" icon="mdi-file-code-outline" size="18" />
+              </div>
               <div class="editor-title-group">
                 <p class="editor-title">{{ activeFile?.path ?? workspace.name }}</p>
                 <span class="muted">{{ workspace.imageRef }}</span>
@@ -655,19 +658,16 @@ onBeforeUnmount(disposePresence)
               >
                 {{ presenceList.length }} online
               </v-chip>
-              <v-btn-toggle v-model="previewMode" mandatory density="compact" variant="outlined">
-                <v-btn value="web" size="small" icon="mdi-web" title="Web preview" />
-                <v-btn value="terminal" size="small" icon="mdi-console" title="Terminal preview" />
-              </v-btn-toggle>
               <v-btn
+                class="run-btn"
                 color="primary"
                 variant="elevated"
-                size="small"
-                icon="mdi-play"
-                title="Run preview"
+                prepend-icon="mdi-play"
                 :loading="previewLoading"
                 @click="startPreview"
-              />
+              >
+                Run
+              </v-btn>
             </div>
           </header>
 
@@ -682,11 +682,12 @@ onBeforeUnmount(disposePresence)
               </div>
               <div v-else class="workspace-stub">
                 <div class="workspace-stub-card">
-                  <v-icon
-                    :icon="filePath ? 'mdi-file-question-outline' : 'mdi-folder-multiple-outline'"
-                    size="48"
-                    class="workspace-stub-icon"
-                  />
+                  <div class="workspace-stub-mark">
+                    <v-icon
+                      :icon="filePath ? 'mdi-file-question-outline' : 'mdi-folder-multiple-outline'"
+                      size="32"
+                    />
+                  </div>
                   <h1 class="workspace-stub-title">{{ workspace.name }}</h1>
                   <p class="workspace-stub-subtitle">{{ workspace.imageRef }}</p>
                   <p v-if="filePath" class="workspace-stub-hint workspace-stub-hint--warn">
@@ -698,37 +699,14 @@ onBeforeUnmount(disposePresence)
               </div>
             </section>
 
-            <aside class="preview-panel">
-              <header class="preview-toolbar">
-                <div class="preview-title">
-                  <v-icon :icon="preview?.type === 'terminal' ? 'mdi-console' : 'mdi-web'" size="18" />
-                  <span>Preview</span>
-                </div>
-                <a
-                  v-if="preview"
-                  class="preview-link"
-                  :href="preview.url"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {{ preview.host }}
-                </a>
-              </header>
-              <v-alert v-if="previewError" type="error" density="compact" variant="tonal" class="preview-error">
-                {{ previewError }}
-              </v-alert>
-              <div v-if="!preview" class="preview-empty">
-                <v-icon icon="mdi-play-circle-outline" size="40" />
-                <span>Press Play to start preview.</span>
-              </div>
-              <iframe
-                v-else-if="preview.type === 'web'"
-                class="preview-frame"
-                :src="preview.url"
-                title="Workspace web preview"
-              />
-              <pre v-else class="preview-terminal">{{ preview.output || "Command finished without output." }}</pre>
-            </aside>
+            <PreviewPanel
+              v-model:mode="previewMode"
+              :preview="preview"
+              :loading="previewLoading"
+              :error="previewError"
+              @run="startPreview"
+              @refresh="startPreview"
+            />
           </div>
         </main>
       </template>
@@ -738,34 +716,25 @@ onBeforeUnmount(disposePresence)
       <template v-if="activeFile">
         <header class="editor-toolbar">
           <div class="editor-title-row">
-            <v-icon class="editor-file-icon" icon="mdi-file-code-outline" size="24" />
+            <div class="editor-file-pill">
+              <v-icon class="editor-file-icon" icon="mdi-file-code-outline" size="18" />
+            </div>
             <div class="editor-title-group">
               <p class="editor-title">{{ activeFile.path }}</p>
               <span class="muted">{{ workspace.imageRef }}</span>
             </div>
           </div>
           <div class="editor-toolbar-meta">
-            <v-chip
-              v-if="presenceList.length"
-              size="small"
-              variant="tonal"
-              prepend-icon="mdi-account-multiple-outline"
-            >
-              {{ presenceList.length }} online
-            </v-chip>
-            <v-btn-toggle v-model="previewMode" mandatory density="compact" variant="outlined">
-              <v-btn value="web" size="small" icon="mdi-web" title="Web preview" />
-              <v-btn value="terminal" size="small" icon="mdi-console" title="Terminal preview" />
-            </v-btn-toggle>
             <v-btn
+              class="run-btn"
               color="primary"
               variant="elevated"
-              size="small"
-              icon="mdi-play"
-              title="Run preview"
+              prepend-icon="mdi-play"
               :loading="previewLoading"
               @click="startPreview"
-            />
+            >
+              Run
+            </v-btn>
           </div>
         </header>
 
@@ -779,11 +748,12 @@ onBeforeUnmount(disposePresence)
       </template>
       <div v-else class="workspace-stub">
         <div class="workspace-stub-card">
-          <v-icon
-            :icon="filePath ? 'mdi-file-question-outline' : 'mdi-folder-multiple-outline'"
-            size="48"
-            class="workspace-stub-icon"
-          />
+          <div class="workspace-stub-mark">
+            <v-icon
+              :icon="filePath ? 'mdi-file-question-outline' : 'mdi-folder-multiple-outline'"
+              size="32"
+            />
+          </div>
           <h1 class="workspace-stub-title">{{ workspace.name }}</h1>
           <p class="workspace-stub-subtitle">{{ workspace.imageRef }}</p>
           <p v-if="filePath" class="workspace-stub-hint workspace-stub-hint--warn">
@@ -793,31 +763,16 @@ onBeforeUnmount(disposePresence)
           <p v-else class="workspace-stub-hint">Pick a file from the tree to start editing.</p>
         </div>
       </div>
-      <aside class="preview-panel preview-panel--mobile">
-        <header class="preview-toolbar">
-          <div class="preview-title">
-            <v-icon :icon="preview?.type === 'terminal' ? 'mdi-console' : 'mdi-web'" size="18" />
-            <span>Preview</span>
-          </div>
-          <a v-if="preview" class="preview-link" :href="preview.url" target="_blank" rel="noreferrer">
-            {{ preview.host }}
-          </a>
-        </header>
-        <v-alert v-if="previewError" type="error" density="compact" variant="tonal" class="preview-error">
-          {{ previewError }}
-        </v-alert>
-        <div v-if="!preview" class="preview-empty">
-          <v-icon icon="mdi-play-circle-outline" size="40" />
-          <span>Press Play to start preview.</span>
-        </div>
-        <iframe
-          v-else-if="preview.type === 'web'"
-          class="preview-frame"
-          :src="preview.url"
-          title="Workspace web preview"
-        />
-        <pre v-else class="preview-terminal">{{ preview.output || "Command finished without output." }}</pre>
-      </aside>
+
+      <PreviewPanel
+        v-model:mode="previewMode"
+        :preview="preview"
+        :loading="previewLoading"
+        :error="previewError"
+        variant="mobile"
+        @run="startPreview"
+        @refresh="startPreview"
+      />
     </main>
 
     <MediaPrepare
@@ -897,7 +852,7 @@ onBeforeUnmount(disposePresence)
   height: 100%;
   flex-direction: column;
   gap: 0;
-  padding: 10px 14px 0;
+  padding: 10px 12px 0;
   background: var(--md-sys-color-surface-container-low);
   border-right: 1px solid var(--md-sys-color-outline-variant);
   min-height: 0;
@@ -908,9 +863,10 @@ onBeforeUnmount(disposePresence)
 .workspace-context {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   flex: 1;
+  padding-left: 4px;
 }
 
 .workspace-context-text {
@@ -921,9 +877,9 @@ onBeforeUnmount(disposePresence)
 }
 
 .workspace-context-title {
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
   color: var(--md-sys-color-on-surface);
   white-space: nowrap;
   overflow: hidden;
@@ -1138,8 +1094,8 @@ onBeforeUnmount(disposePresence)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 14px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--md-sys-color-outline-variant);
   background: var(--md-sys-color-surface-container-lowest);
 }
@@ -1147,7 +1103,7 @@ onBeforeUnmount(disposePresence)
 .editor-toolbar-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1155,8 +1111,23 @@ onBeforeUnmount(disposePresence)
 .editor-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
+}
+
+.editor-file-pill {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  flex-shrink: 0;
+}
+
+.editor-file-icon {
+  color: inherit;
 }
 
 .editor-title-group {
@@ -1167,15 +1138,24 @@ onBeforeUnmount(disposePresence)
 
 .editor-title {
   margin: 0;
-  font-weight: 600;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--md-sys-color-on-surface);
 }
 
 .muted {
   font-size: 12px;
   color: var(--md-sys-color-on-surface-variant);
+}
+
+.run-btn {
+  height: 40px !important;
+  padding: 0 18px !important;
+  font-weight: 700 !important;
 }
 
 .workspace-stub {
@@ -1192,24 +1172,30 @@ onBeforeUnmount(disposePresence)
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 32px 36px;
+  padding: 36px 40px;
   max-width: 460px;
   text-align: center;
   border-radius: var(--md-sys-shape-large);
-  background: var(--md-sys-color-surface-container-low);
+  background: var(--md-sys-color-surface-container-lowest);
   border: 1px solid var(--md-sys-color-outline-variant);
 }
 
-.workspace-stub-icon {
-  color: var(--md-sys-color-primary);
-  margin-bottom: 4px;
+.workspace-stub-mark {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  margin-bottom: 6px;
 }
 
 .workspace-stub-title {
   margin: 0;
   font-size: 24px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--md-sys-color-on-surface);
 }
 
@@ -1252,7 +1238,7 @@ onBeforeUnmount(disposePresence)
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 38%);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 40%);
 }
 
 .editor-column {
@@ -1260,92 +1246,6 @@ onBeforeUnmount(disposePresence)
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.preview-panel {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--md-sys-color-outline-variant);
-  background: var(--md-sys-color-surface-container-lowest);
-}
-
-.preview-panel--mobile {
-  min-height: 360px;
-  border-left: 0;
-  border-top: 1px solid var(--md-sys-color-outline-variant);
-}
-
-.preview-toolbar {
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
-  background: var(--md-sys-color-surface-container-low);
-}
-
-.preview-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--md-sys-color-on-surface);
-}
-
-.preview-link {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--md-sys-color-primary);
-  text-decoration: none;
-}
-
-.preview-link:hover {
-  text-decoration: underline;
-}
-
-.preview-error {
-  margin: 10px 12px 0;
-}
-
-.preview-empty {
-  flex: 1;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  padding: 24px;
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 13px;
-}
-
-.preview-frame {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  border: 0;
-  background: #fff;
-}
-
-.preview-terminal {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 14px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: #101418;
-  color: #d7e2ea;
-  font: 12px/1.55 'Monaspace Neon', 'JetBrains Mono', monospace;
 }
 
 .detail-loading,
@@ -1357,16 +1257,6 @@ onBeforeUnmount(disposePresence)
   justify-content: center;
   gap: 12px;
   color: var(--md-sys-color-on-surface-variant);
-}
-
-.status-chip[data-status="running"] {
-  background: var(--md-sys-color-success-container);
-  color: var(--md-sys-color-on-success-container);
-}
-
-.status-chip[data-status="error"] {
-  background: var(--md-sys-color-error-container);
-  color: var(--md-sys-color-on-error-container);
 }
 
 .error-banner {

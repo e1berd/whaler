@@ -13,78 +13,78 @@ import { router } from "./router"
 const whalerLight = {
   dark: false,
   colors: {
-    background: "#fdf8ff",
-    surface: "#fdf8ff",
-    "surface-bright": "#fdf8ff",
-    "surface-dim": "#ddd8e0",
+    background: "#fafafc",
+    surface: "#fafafc",
+    "surface-bright": "#ffffff",
+    "surface-dim": "#dcdde3",
     "surface-container-lowest": "#ffffff",
-    "surface-container-low": "#f7f2fa",
-    "surface-container": "#f1ecf4",
-    "surface-container-high": "#ece6ee",
-    "surface-container-highest": "#e6e1e9",
-    "on-surface": "#1b1b21",
-    "on-surface-variant": "#45464f",
-    "surface-variant": "#e2e1ec",
-    outline: "#767680",
-    "outline-variant": "#c6c5d0",
-    primary: "#3f5f92",
+    "surface-container-low": "#f3f3f6",
+    "surface-container": "#ecedf0",
+    "surface-container-high": "#e4e5ea",
+    "surface-container-highest": "#dcdde3",
+    "on-surface": "#1a1c1f",
+    "on-surface-variant": "#494c52",
+    "surface-variant": "#e0e2e7",
+    outline: "#767880",
+    "outline-variant": "#c8cad0",
+    primary: "#3d5680",
     "on-primary": "#ffffff",
-    "primary-container": "#d7e3ff",
-    "on-primary-container": "#001b3e",
-    secondary: "#565f71",
+    "primary-container": "#d6e2f6",
+    "on-primary-container": "#001b3b",
+    secondary: "#545c6b",
     "on-secondary": "#ffffff",
-    "secondary-container": "#dae2f9",
-    "on-secondary-container": "#131c2b",
-    tertiary: "#705575",
+    "secondary-container": "#dde2ec",
+    "on-secondary-container": "#181c25",
+    tertiary: "#6b566f",
     "on-tertiary": "#ffffff",
-    "tertiary-container": "#fad8fd",
-    "on-tertiary-container": "#28132e",
-    error: "#ba1a1a",
+    "tertiary-container": "#f1d9f4",
+    "on-tertiary-container": "#251329",
+    error: "#b3261e",
     "on-error": "#ffffff",
-    "error-container": "#ffdad6",
-    "on-error-container": "#410002",
-    info: "#006782",
-    success: "#226b35",
-    warning: "#7a5600"
+    "error-container": "#f9dedc",
+    "on-error-container": "#410e0b",
+    info: "#1d6b86",
+    success: "#386b48",
+    warning: "#7a5800"
   }
 }
 
 const whalerDark = {
   dark: true,
   colors: {
-    background: "#131318",
-    surface: "#131318",
-    "surface-bright": "#39393f",
-    "surface-dim": "#131318",
-    "surface-container-lowest": "#0e0e13",
-    "surface-container-low": "#1b1b21",
-    "surface-container": "#1f1f25",
-    "surface-container-high": "#29292f",
-    "surface-container-highest": "#34343a",
-    "on-surface": "#e6e1e9",
-    "on-surface-variant": "#c6c5d0",
-    "surface-variant": "#45464f",
-    outline: "#90909a",
-    "outline-variant": "#45464f",
-    primary: "#abc7ff",
-    "on-primary": "#0a305f",
-    "primary-container": "#284777",
-    "on-primary-container": "#d7e3ff",
-    secondary: "#bec6dc",
-    "on-secondary": "#283141",
-    "secondary-container": "#3e4759",
-    "on-secondary-container": "#dae2f9",
-    tertiary: "#ddbce0",
-    "on-tertiary": "#3f2845",
-    "tertiary-container": "#573e5d",
-    "on-tertiary-container": "#fad8fd",
-    error: "#ffb4ab",
-    "on-error": "#690005",
-    "error-container": "#93000a",
-    "on-error-container": "#ffdad6",
+    background: "#111216",
+    surface: "#111216",
+    "surface-bright": "#3a3c45",
+    "surface-dim": "#111216",
+    "surface-container-lowest": "#0a0b0e",
+    "surface-container-low": "#181a1f",
+    "surface-container": "#1d1f24",
+    "surface-container-high": "#272930",
+    "surface-container-highest": "#32343c",
+    "on-surface": "#e3e4e8",
+    "on-surface-variant": "#c4c6cc",
+    "surface-variant": "#45474e",
+    outline: "#8e9097",
+    "outline-variant": "#45474e",
+    primary: "#a8c4ed",
+    "on-primary": "#0c3057",
+    "primary-container": "#26466f",
+    "on-primary-container": "#d6e2f6",
+    secondary: "#bcc4d8",
+    "on-secondary": "#2a3140",
+    "secondary-container": "#3c4453",
+    "on-secondary-container": "#dde2ec",
+    tertiary: "#d8bcdb",
+    "on-tertiary": "#3b2a40",
+    "tertiary-container": "#523f56",
+    "on-tertiary-container": "#f1d9f4",
+    error: "#f2b8b5",
+    "on-error": "#601410",
+    "error-container": "#8c1d18",
+    "on-error-container": "#f9dedc",
     info: "#86d2ee",
-    success: "#a4d5a6",
-    warning: "#e8c46c"
+    success: "#a3d2ac",
+    warning: "#e9c170"
   }
 }
 
@@ -96,19 +96,25 @@ const vuetify = createVuetify({
   },
   defaults: {
     VBtn: {
-      rounded: "xl"
+      rounded: "pill",
+      ripple: true
     },
     VCard: {
-      rounded: "xl"
-    },
-    VChip: {
       rounded: "lg"
     },
+    VChip: {
+      rounded: "pill"
+    },
     VSelect: {
-      color: "primary"
+      color: "primary",
+      variant: "solo-filled"
     },
     VTextField: {
-      color: "primary"
+      color: "primary",
+      variant: "solo-filled"
+    },
+    VTooltip: {
+      openDelay: 200
     }
   },
   theme: {

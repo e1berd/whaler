@@ -244,6 +244,22 @@ export async function startWebPreview(input: {
   }
 }
 
+// We don't proxy WebSockets to the sandbox, so silence Vite's HMR client by
+// returning a no-op JS module. This avoids the "failed to connect to websocket"
+// warnings and the fallback ws://localhost:<port> attempts that browsers log.
+const VITE_HMR_NOOP_SCRIPT = `
+export const createHotContext = () => ({
+  accept() {}, acceptExports() {}, dispose() {}, prune() {},
+  decline() {}, invalidate() {},
+  on() {}, off() {}, send() {}, data: {}
+});
+export const updateStyle = () => {};
+export const removeStyle = () => {};
+export const injectQuery = (url) => url;
+`
+
+const VITE_CLIENT_PATHS = new Set(["/@vite/client", "/@vite/env"])
+
 export async function proxyPreviewRequest(request: Request): Promise<Response> {
   const host = request.headers.get("host")?.split(":")[0] ?? ""
   const target = previewTargets.get(host)
@@ -252,6 +268,17 @@ export async function proxyPreviewRequest(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url)
+
+  if (VITE_CLIENT_PATHS.has(url.pathname)) {
+    return new Response(VITE_HMR_NOOP_SCRIPT, {
+      status: 200,
+      headers: {
+        "content-type": "application/javascript; charset=utf-8",
+        "cache-control": "no-store"
+      }
+    })
+  }
+
   const headers = new Headers(request.headers)
   for (const header of [
     "connection",
@@ -278,8 +305,9 @@ export async function proxyPreviewRequest(request: Request): Promise<Response> {
     const contentType = response.headers.get("content-type") ?? ""
     if (contentType.includes("text/html")) {
       let html = await response.text()
+      // Strip the Vite HMR client tag regardless of attribute order/extras.
       html = html.replaceAll(
-        /<script\s+type=["']module["']\s+src=["']\/@vite\/client["']><\/script>\s*/g,
+        /<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*><\/script>\s*/gi,
         ""
       )
       if (!/^\s*<!doctype html>/i.test(html)) {

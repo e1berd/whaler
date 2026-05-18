@@ -112,9 +112,12 @@ async function removeAvatar() {
             @click="themePreference = option.value"
           >
             <span class="theme-preview" :data-preview="option.value">
-              <span />
-              <span />
-              <span />
+              <span class="theme-preview-rail" />
+              <span class="theme-preview-stage">
+                <i />
+                <i />
+                <i />
+              </span>
             </span>
             <span class="theme-option-body">
               <v-icon :icon="option.icon" size="22" />
@@ -123,7 +126,7 @@ async function removeAvatar() {
             <v-icon
               class="theme-option-check"
               :icon="themePreference === option.value ? 'mdi-check-circle' : 'mdi-circle-outline'"
-              size="20"
+              size="22"
             />
           </button>
         </div>

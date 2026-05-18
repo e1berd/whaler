@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watch } from "vue"
-import { useRouter } from "@kitbag/router"
+import { computed, onBeforeUnmount, onMounted, watch } from "vue"
+import { useRoute, useRouter } from "@kitbag/router"
 import { useDisplay, useTheme } from "vuetify"
 import AuthView from "@/components/AuthView.vue"
 import { initSession, signOut, teardownSession, useSession } from "@/lib/session"
@@ -12,6 +12,7 @@ import {
 } from "@/lib/theme"
 
 const router = useRouter()
+const route = useRoute()
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
 const { session, authReady, authNotice, currentUser } = useSession()
@@ -34,6 +35,13 @@ watch(
   },
   { immediate: true }
 )
+
+const activeKey = computed<"home" | "settings" | null>(() => {
+  const name = route.name as string | undefined
+  if (name === "settings") return "settings"
+  if (name === "home" || name === "workspace-create" || name === "workspace-detail" || name === "workspace-file") return "home"
+  return null
+})
 </script>
 
 <template>
@@ -46,10 +54,14 @@ watch(
   <AuthView v-else-if="!session" :notice="authNotice" />
   <v-app v-else class="app-shell">
     <v-app-bar :height="mdAndUp ? 64 : 56" flat class="app-bar">
+      <div class="app-bar-brand">
+        <div class="brand-mark">W</div>
+        <span class="app-bar-brand-name">Whaler</span>
+      </div>
       <div id="app-bar-context" class="app-bar-context" />
       <v-spacer />
       <div class="app-bar-actions">
-        <v-chip class="user-chip" size="small" variant="tonal">
+        <v-chip class="user-chip" size="small" variant="flat">
           <template #prepend>
             <span class="user-chip-avatar" :style="{ backgroundColor: currentUser.color }">
               <img v-if="currentUser.avatarUrl" :src="currentUser.avatarUrl" :alt="currentUser.name" />
@@ -61,7 +73,7 @@ watch(
       </div>
     </v-app-bar>
 
-    <v-navigation-drawer :width="mdAndUp ? 64 : 56" permanent class="navigation-rail">
+    <v-navigation-drawer :width="mdAndUp ? 76 : 64" permanent class="navigation-rail">
       <div class="nav-rail-content">
         <div class="nav-rail-items nav-rail-items--top">
           <v-tooltip location="right" text="Workspaces">
@@ -69,7 +81,8 @@ watch(
               <v-btn
                 v-bind="tooltipProps"
                 class="nav-rail-button"
-                icon="mdi-view-dashboard-outline"
+                :class="{ 'nav-rail-button--active': activeKey === 'home' }"
+                :icon="activeKey === 'home' ? 'mdi-view-dashboard' : 'mdi-view-dashboard-outline'"
                 variant="text"
                 @click="router.push('home')"
               />
@@ -80,7 +93,8 @@ watch(
               <v-btn
                 v-bind="tooltipProps"
                 class="nav-rail-button"
-                icon="mdi-cog-outline"
+                :class="{ 'nav-rail-button--active': activeKey === 'settings' }"
+                :icon="activeKey === 'settings' ? 'mdi-cog' : 'mdi-cog-outline'"
                 variant="text"
                 @click="router.push('settings')"
               />
@@ -111,12 +125,33 @@ watch(
 </template>
 
 <style scoped>
+.app-bar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 14px;
+  margin-right: 14px;
+}
+
+.app-bar-brand-name {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--md-sys-color-on-surface);
+}
+
+@media (max-width: 720px) {
+  .app-bar-brand-name {
+    display: none;
+  }
+}
+
 .app-bar-context {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  margin-inline-start: 8px;
+  gap: 8px;
 }
 
 .nav-rail-content {
@@ -124,37 +159,28 @@ watch(
   flex-direction: column;
   justify-content: space-between;
   height: 100%;
-  padding: 8px 0;
+  padding: 14px 0 18px;
 }
 
 .nav-rail-items {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-}
-
-.nav-rail-button {
-  width: 44px !important;
-  height: 44px !important;
-}
-
-.nav-rail-button--danger :deep(.v-icon) {
-  color: rgb(var(--v-theme-error));
+  gap: 8px;
 }
 
 .user-chip-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   overflow: hidden;
   color: #fff;
-  font-weight: 600;
-  font-size: 11px;
-  margin-right: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  margin-right: 4px;
 }
 
 .user-chip-avatar img {

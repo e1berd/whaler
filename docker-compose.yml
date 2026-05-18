@@ -10,6 +10,7 @@ services:
       API_PORT: 3000
       DATABASE_URL: ${DATABASE_URL_DOCKER:-postgres://postgres:postgres@host.docker.internal:54322/postgres}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SUPABASE_URL: ${SUPABASE_URL_DOCKER:-http://host.docker.internal:54321}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
       RUNNER_INTERNAL_URL: ${RUNNER_INTERNAL_URL_DOCKER:-http://runner:3002}
       RUNNER_INTERNAL_TOKEN: ${RUNNER_INTERNAL_TOKEN}
@@ -28,6 +29,7 @@ services:
       COLLAB_PORT: 3001
       DATABASE_URL: ${DATABASE_URL_DOCKER:-postgres://postgres:postgres@host.docker.internal:54322/postgres}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      SUPABASE_URL: ${SUPABASE_URL_DOCKER:-http://host.docker.internal:54321}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

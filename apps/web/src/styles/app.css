@@ -203,6 +203,27 @@ select {
   min-height: 48px;
 }
 
+.boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-surface);
+}
+
+.boot-indicator {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-extra-large);
+  background: var(--md-sys-color-surface-container-lowest);
+  box-shadow: var(--md-sys-elevation-1);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .app-bar {
   height: var(--app-top-bar-height);
   border-bottom: 1px solid var(--md-sys-color-outline-variant) !important;

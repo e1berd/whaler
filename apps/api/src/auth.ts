@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory"
 import { HTTPException } from "hono/http-exception"
-import { jwtVerify } from "jose"
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from "jose"
 import { profiles } from "@whaler/db/schema"
 import { colorFromUserId } from "@whaler/shared"
 import { db } from "./db"
@@ -19,11 +19,14 @@ type JwtPayload = {
 }
 
 const secret = new TextEncoder().encode(env.supabaseJwtSecret)
+const jwks = createRemoteJWKSet(new URL("/auth/v1/.well-known/jwks.json", env.supabaseUrl))
 
 export async function verifySupabaseAccessToken(token: string): Promise<AuthUser> {
-  const { payload } = await jwtVerify(token, secret, {
-    algorithms: ["HS256"]
-  })
+  const { alg } = decodeProtectedHeader(token)
+  const { payload } =
+    alg === "HS256"
+      ? await jwtVerify(token, secret, { algorithms: ["HS256"] })
+      : await jwtVerify(token, jwks, { algorithms: ["ES256", "RS256"] })
 
   const typed = payload as JwtPayload
   if (!typed.sub) {

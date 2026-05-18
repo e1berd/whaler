@@ -39,6 +39,8 @@ type ThemePreference = "light" | "dark" | "system"
 const THEME_STORAGE_KEY = "whaler.theme-preference"
 
 const session = ref<Session | null>(null)
+const authReady = ref(false)
+const authNotice = ref<string | null>(null)
 const images = ref<SandboxImage[]>([])
 const workspaces = ref<Workspace[]>([])
 const selectedWorkspaceId = ref<string | null>(null)
@@ -58,6 +60,9 @@ const systemPrefersDark = ref(false)
 let presenceProvider: HocuspocusProvider | null = null
 let presenceDoc: Y.Doc | null = null
 let removeThemeMediaListener: (() => void) | null = null
+let removeAuthListener: (() => void) | null = null
+let loadingWorkspaceData = false
+let clearingInvalidSession = false
 
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
@@ -155,16 +160,97 @@ function client() {
   return apiClient(accessToken.value)
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error("Operation timed out"))
+    }, timeoutMs)
+
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => window.clearTimeout(timeout))
+  })
+}
+
+function clearWorkspaceState() {
+  images.value = []
+  workspaces.value = []
+  selectedWorkspaceId.value = null
+  selectedImageId.value = null
+  files.value = []
+  activeFile.value = null
+  presence.value = []
+}
+
+async function clearInvalidSession() {
+  if (clearingInvalidSession) return
+  clearingInvalidSession = true
+  authNotice.value = "Your session expired. Please sign in again."
+  error.value = null
+  session.value = null
+  clearWorkspaceState()
+  disposePresence()
+  try {
+    await withTimeout(supabase.auth.signOut(), 2500)
+  } catch {
+    // Local state is already cleared; a slow auth endpoint must not keep the app locked.
+  } finally {
+    clearingInvalidSession = false
+  }
+}
+
+async function handleUnauthorizedResponse(response: Response): Promise<boolean> {
+  if (response.status !== 401) return false
+  await clearInvalidSession()
+  return true
+}
+
+async function resolveInitialSession(): Promise<Session | null> {
+  try {
+    const result = await withTimeout(supabase.auth.getSession(), 2500)
+    return result.data.session
+  } catch {
+    authNotice.value = "Could not restore your previous session. Please sign in again."
+    return null
+  }
+}
+
+async function loadAuthenticatedData() {
+  if (!session.value) return
+  loadingWorkspaceData = true
+
+  try {
+    await loadInitialData()
+    await loadFiles()
+    connectPresence()
+  } catch {
+    error.value = "Failed to load workspace data"
+  } finally {
+    loadingWorkspaceData = false
+  }
+}
+
 async function loadInitialData() {
   if (!session.value) return
   error.value = null
   const api = client()
+
+  const meResponse = await api.v1.me.$get()
+  if (!meResponse.ok) {
+    if (await handleUnauthorizedResponse(meResponse)) return
+    error.value = "Failed to validate session"
+    return
+  }
+
   const [imagesResponse, workspacesResponse] = await Promise.all([
     api.v1.images.$get(),
     api.v1.workspaces.$get()
   ])
 
   if (!imagesResponse.ok || !workspacesResponse.ok) {
+    if (await handleUnauthorizedResponse(imagesResponse)) return
+    if (await handleUnauthorizedResponse(workspacesResponse)) return
     error.value = "Failed to load workspace data"
     return
   }
@@ -192,6 +278,7 @@ async function loadFiles() {
   })
 
   if (!response.ok) {
+    if (await handleUnauthorizedResponse(response)) return
     error.value = "Failed to load files"
     return
   }
@@ -213,6 +300,10 @@ async function createWorkspace() {
   })
 
   if (!response.ok) {
+    if (await handleUnauthorizedResponse(response)) {
+      creatingWorkspace.value = false
+      return
+    }
     error.value = await response.text()
     creatingWorkspace.value = false
     return
@@ -241,6 +332,10 @@ async function createFile() {
   })
 
   if (!response.ok) {
+    if (await handleUnauthorizedResponse(response)) {
+      creatingFile.value = false
+      return
+    }
     error.value = await response.text()
     creatingFile.value = false
     return
@@ -290,29 +385,40 @@ function updatePresenceLocation() {
 }
 
 async function signOut() {
+  authNotice.value = null
   await supabase.auth.signOut()
 }
 
 onMounted(async () => {
-  initializeThemePreference()
+  try {
+    initializeThemePreference()
 
-  const result = await supabase.auth.getSession()
-  session.value = result.data.session
-  await loadInitialData()
-  await loadFiles()
+    const authListener = supabase.auth.onAuthStateChange((event: AuthChangeEvent, nextSession: Session | null) => {
+      if (event === "INITIAL_SESSION") return
+      session.value = nextSession
+      if (nextSession) {
+        authNotice.value = null
+        void loadAuthenticatedData()
+      } else {
+        clearWorkspaceState()
+        disposePresence()
+      }
+    })
+    removeAuthListener = () => authListener.data.subscription.unsubscribe()
 
-  supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, nextSession: Session | null) => {
-    session.value = nextSession
-    if (nextSession) {
-      await loadInitialData()
-      await loadFiles()
-    } else {
-      disposePresence()
-    }
-  })
+    session.value = await resolveInitialSession()
+  } finally {
+    authReady.value = true
+  }
+
+  if (session.value) {
+    authNotice.value = null
+    void loadAuthenticatedData()
+  }
 })
 
 watch(selectedWorkspaceId, async () => {
+  if (loadingWorkspaceData) return
   await loadFiles()
   connectPresence()
 })
@@ -322,7 +428,7 @@ watch(currentUser, () => presenceProvider?.setAwarenessField("user", currentUser
 watch(
   effectiveThemeName,
   (themeName) => {
-    theme.global.name.value = themeName
+    theme.change(themeName)
     applyDocumentTheme(themeName)
   },
   { immediate: true }
@@ -335,11 +441,18 @@ watch(themePreference, (preference) => {
 onBeforeUnmount(() => {
   disposePresence()
   removeThemeMediaListener?.()
+  removeAuthListener?.()
 })
 </script>
 
 <template>
-  <AuthView v-if="!session" />
+  <main v-if="!authReady" class="boot-screen">
+    <div class="boot-indicator">
+      <div class="brand-mark">W</div>
+      <span>Loading Whaler</span>
+    </div>
+  </main>
+  <AuthView v-else-if="!session" :notice="authNotice" />
   <v-app v-else class="app-shell">
     <v-app-bar :height="mdAndUp ? 72 : 64" flat class="app-bar">
       <v-app-bar-title>

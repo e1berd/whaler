@@ -2,6 +2,10 @@
 import { ref } from "vue"
 import { supabase } from "@/lib/supabase"
 
+defineProps<{
+  notice?: string | null
+}>()
+
 const email = ref("")
 const password = ref("")
 const loading = ref(false)
@@ -46,6 +50,10 @@ async function submit() {
         <v-btn value="sign-in" prepend-icon="mdi-login">Sign in</v-btn>
         <v-btn value="sign-up" prepend-icon="mdi-account-plus">Sign up</v-btn>
       </v-btn-toggle>
+
+      <v-alert v-if="notice" type="info" density="comfortable" variant="tonal" class="mb-4">
+        {{ notice }}
+      </v-alert>
 
       <v-form @submit.prevent="submit">
         <v-text-field

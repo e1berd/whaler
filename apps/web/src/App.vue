@@ -15,7 +15,7 @@ const router = useRouter()
 const route = useRoute()
 const theme = useTheme()
 const { mdAndUp } = useDisplay()
-const { session, authReady, authNotice, currentUser } = useSession()
+const { session, authReady, authNotice, passwordRecovery, currentUser } = useSession()
 
 onMounted(async () => {
   initializeThemePreference()
@@ -51,7 +51,7 @@ const activeKey = computed<"home" | "settings" | null>(() => {
       <span>Loading Whaler</span>
     </div>
   </main>
-  <AuthView v-else-if="!session" :notice="authNotice" />
+  <AuthView v-else-if="!session || passwordRecovery" :notice="authNotice" :password-recovery="passwordRecovery" />
   <v-app v-else class="app-shell">
     <v-app-bar :height="mdAndUp ? 64 : 56" flat class="app-bar">
       <div class="app-bar-brand">

@@ -82,6 +82,32 @@ Do not expose Postgres or the Docker socket publicly.
 - site URL: `https://app.example.com`
 - allowed redirect URLs: `https://app.example.com`
 
+Email confirmation and password recovery are handled by Supabase Auth, not Laravel mail. For Beget SMTP, keep only the mail values the Auth service needs:
+
+```dotenv
+MAIL_HOST=smtp.beget.com
+MAIL_PORT=465
+MAIL_USERNAME=ingbook@ingbook.ru
+MAIL_PASSWORD=replace-with-beget-mailbox-password
+MAIL_FROM_ADDRESS=ingbook@ingbook.ru
+MAIL_FROM_NAME=Whaler
+```
+
+Map those values into the self-hosted Supabase Auth container:
+
+```dotenv
+GOTRUE_SITE_URL=https://app.example.com
+GOTRUE_URI_ALLOW_LIST=https://app.example.com
+GOTRUE_EXTERNAL_EMAIL_ENABLED=true
+GOTRUE_MAILER_AUTOCONFIRM=false
+GOTRUE_SMTP_HOST=${MAIL_HOST}
+GOTRUE_SMTP_PORT=${MAIL_PORT}
+GOTRUE_SMTP_USER=${MAIL_USERNAME}
+GOTRUE_SMTP_PASS=${MAIL_PASSWORD}
+GOTRUE_SMTP_ADMIN_EMAIL=${MAIL_FROM_ADDRESS}
+GOTRUE_SMTP_SENDER_NAME=${MAIL_FROM_NAME}
+```
+
 ## Verification
 
 ```bash

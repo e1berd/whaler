@@ -16,6 +16,7 @@ const session = ref<Session | null>(null)
 const profile = ref<Profile | null>(null)
 const authReady = ref(false)
 const authNotice = ref<string | null>(null)
+const passwordRecovery = ref(false)
 let initialized = false
 let removeAuthListener: (() => void) | null = null
 let clearingInvalidSession = false
@@ -120,6 +121,7 @@ export async function initSession() {
 
   const listener = supabase.auth.onAuthStateChange((event, nextSession) => {
     if (event === "INITIAL_SESSION") return
+    passwordRecovery.value = event === "PASSWORD_RECOVERY"
     session.value = nextSession
     if (nextSession) authNotice.value = null
     else profile.value = null
@@ -145,9 +147,14 @@ export function teardownSession() {
 
 export async function signOut() {
   authNotice.value = null
+  passwordRecovery.value = false
   await supabase.auth.signOut()
 }
 
+export function finishPasswordRecovery() {
+  passwordRecovery.value = false
+}
+
 export function useSession() {
-  return { session, profile, authReady, authNotice, accessToken, currentUser }
+  return { session, profile, authReady, authNotice, passwordRecovery, accessToken, currentUser }
 }

@@ -28,6 +28,11 @@ function supabaseUrl(): string {
 
 export const SUPABASE_URL = supabaseUrl()
 
+export function authRedirectUrl(): string {
+  if (typeof window === "undefined") return "http://localhost:5173"
+  return window.location.origin
+}
+
 export function collabUrl(): string {
   const configured = import.meta.env.VITE_COLLAB_URL
   if (configured) return configured

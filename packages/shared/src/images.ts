@@ -127,6 +127,216 @@ export const SANDBOX_IMAGES = [
     image: "whaler/sandbox-vite-angular:latest",
     description: "Angular 21+ project image for browser previews",
     languages: ["typescript", "javascript", "html", "css", "json"],
+    defaultFiles: [
+      {
+        path: "package.json",
+        content: `{
+  "scripts": {
+    "start": "ng serve",
+    "build": "ng build"
+  },
+  "dependencies": {
+    "@angular/animations": "^21.2.0",
+    "@angular/common": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/forms": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@angular/router": "^21.2.0",
+    "rxjs": "^7.8.2",
+    "tslib": "^2.8.1",
+    "zone.js": "^0.15.1"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.2.0",
+    "@angular/cli": "^21.2.0",
+    "@angular/compiler-cli": "^21.2.0",
+    "typescript": "^5.9.3"
+  }
+}
+`
+      },
+      {
+        path: "angular.json",
+        content: `{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "whaler-angular-preview": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": ["src/styles.css"]
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "whaler-angular-preview:build:production"
+            },
+            "development": {
+              "buildTarget": "whaler-angular-preview:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}
+`
+      },
+      {
+        path: "tsconfig.json",
+        content: `{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "outDir": "./dist/out-tsc",
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "moduleResolution": "bundler",
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "ES2022"
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  }
+}
+`
+      },
+      {
+        path: "tsconfig.app.json",
+        content: `{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "files": ["src/main.ts"],
+  "include": ["src/**/*.d.ts"]
+}
+`
+      },
+      {
+        path: "index.html",
+        content: `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Whaler Angular Preview</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <app-root></app-root>
+  </body>
+</html>
+`
+      },
+      {
+        path: "src/main.ts",
+        content: `import { Component, signal } from "@angular/core"\nimport { bootstrapApplication } from "@angular/platform-browser"\n\n@Component({\n  selector: "app-root",\n  standalone: true,\n  template: \`\n    <main class="page">\n      <section class="panel">\n        <p class="eyebrow">Angular 21+</p>\n        <h1>{{ title() }}</h1>\n        <p>Edit <code>src/main.ts</code> and press Run.</p>\n        <button type="button" (click)="increment()">Clicks: {{ clicks() }}</button>\n      </section>\n    </main>\n  \`\n})\nclass App {\n  readonly title = signal("Whaler Angular preview")\n  readonly clicks = signal(0)\n\n  increment(): void {\n    this.clicks.update((value) => value + 1)\n  }\n}\n\nbootstrapApplication(App).catch((error) => console.error(error))\n`
+      },
+      {
+        path: "src/styles.css",
+        content: `html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: Inter, system-ui, sans-serif;
+  background: #101418;
+  color: #f7fafc;
+}
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.panel {
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #7dd3fc;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 42px;
+}
+
+p {
+  margin: 0;
+  color: #cbd5e1;
+}
+
+code {
+  background: #26313a;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+button {
+  justify-self: center;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #38bdf8;
+  color: #082f49;
+  font-weight: 800;
+  cursor: pointer;
+}
+`
+      },
+      {
+        path: "public/.gitkeep",
+        content: ``
+      }
+    ],
     preview: {
       webCommand: "npm install && npm start -- --host 0.0.0.0 --port ${PORT}",
       terminalCommand: "npm install && npm run build",

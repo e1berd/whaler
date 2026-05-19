@@ -13,7 +13,7 @@ import { bracketMatching, indentOnInput } from "@codemirror/language"
 import { HocuspocusProvider } from "@hocuspocus/provider"
 import { yCollab } from "y-codemirror.next"
 import * as Y from "yjs"
-import type { AwarenessUser } from "@whaler/shared"
+import type { AwarenessUser, FileLocation } from "@whaler/shared"
 import { collabUrl } from "@/lib/config"
 import { editorBaseTheme, editorHighlight } from "@/lib/editor-theme"
 import { effectiveThemeName } from "@/lib/theme"
@@ -36,6 +36,12 @@ const props = defineProps<{
   file: WorkspaceFile | null
   accessToken: string
   user: AwarenessUser
+  accentColor?: string | null
+  followLocation?: FileLocation | null
+}>()
+
+const emit = defineEmits<{
+  "scroll-change": [location: Pick<FileLocation, "scrollTop" | "scrollHeight" | "clientHeight" | "scrollRatio">]
 }>()
 
 const host = ref<HTMLElement | null>(null)
@@ -45,6 +51,8 @@ const remoteCursors = ref<RemoteCursor[]>([])
 let provider: HocuspocusProvider | null = null
 let ydoc: Y.Doc | null = null
 let removeAwarenessListener: (() => void) | null = null
+let scrollEmitFrame: number | null = null
+let followScrollFrame: number | null = null
 const themeCompartment = new Compartment()
 const highlightCompartment = new Compartment()
 
@@ -96,9 +104,50 @@ function recomputeRemoteCursors() {
   remoteCursors.value = next
 }
 
+function readScrollLocation(): Pick<FileLocation, "scrollTop" | "scrollHeight" | "clientHeight" | "scrollRatio"> | null {
+  const scroller = view.value?.scrollDOM
+  if (!scroller) return null
+  const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+  return {
+    scrollTop: Math.max(0, Math.round(scroller.scrollTop)),
+    scrollHeight: Math.max(0, Math.round(scroller.scrollHeight)),
+    clientHeight: Math.max(0, Math.round(scroller.clientHeight)),
+    scrollRatio: maxScroll > 0 ? Math.min(1, Math.max(0, scroller.scrollTop / maxScroll)) : 0
+  }
+}
+
+function scheduleScrollEmit() {
+  if (scrollEmitFrame !== null) return
+  scrollEmitFrame = window.requestAnimationFrame(() => {
+    scrollEmitFrame = null
+    const location = readScrollLocation()
+    if (location) emit("scroll-change", location)
+  })
+}
+
+function scrollToLocation(location?: FileLocation | null): void {
+  if (!location || !view.value || props.file?.id !== location.fileId) return
+  if (followScrollFrame !== null) window.cancelAnimationFrame(followScrollFrame)
+  followScrollFrame = window.requestAnimationFrame(() => {
+    followScrollFrame = null
+    const scroller = view.value?.scrollDOM
+    if (!scroller) return
+    const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    const nextTop =
+      typeof location.scrollRatio === "number"
+        ? maxScroll * Math.min(1, Math.max(0, location.scrollRatio))
+        : Math.min(maxScroll, Math.max(0, location.scrollTop ?? 0))
+    scroller.scrollTo({ top: nextTop, behavior: "auto" })
+  })
+}
+
 function dispose() {
   removeAwarenessListener?.()
   removeAwarenessListener = null
+  if (scrollEmitFrame !== null) window.cancelAnimationFrame(scrollEmitFrame)
+  if (followScrollFrame !== null) window.cancelAnimationFrame(followScrollFrame)
+  scrollEmitFrame = null
+  followScrollFrame = null
   view.value?.destroy()
   provider?.destroy()
   ydoc?.destroy()
@@ -150,6 +199,7 @@ async function mountEditor() {
         EditorView.updateListener.of((update) => {
           if (update.docChanged || update.viewportChanged || update.geometryChanged) {
             recomputeRemoteCursors()
+            scheduleScrollEmit()
           }
         }),
         themeCompartment.of(editorBaseTheme(modeFromTheme(effectiveThemeName.value))),
@@ -166,12 +216,19 @@ async function mountEditor() {
     removeAwarenessListener = () => awareness.off("change", awarenessListener)
   }
   recomputeRemoteCursors()
+  scheduleScrollEmit()
+  scrollToLocation(props.followLocation)
 }
 
 watch(() => props.file?.id, mountEditor, { immediate: true })
 watch(
   () => props.user,
   () => provider?.setAwarenessField("user", props.user),
+  { deep: true }
+)
+watch(
+  () => props.followLocation,
+  (location) => scrollToLocation(location),
   { deep: true }
 )
 watch(effectiveThemeName, (themeName) => {
@@ -188,12 +245,17 @@ watch(effectiveThemeName, (themeName) => {
 onBeforeUnmount(dispose)
 
 defineExpose({
-  getContent
+  getContent,
+  scrollToLocation
 })
 </script>
 
 <template>
-  <div v-if="file" class="editor-host-frame">
+  <div
+    v-if="file"
+    class="editor-host-frame"
+    :style="{ '--editor-accent-color': accentColor ?? 'transparent' }"
+  >
     <div ref="host" class="editor-host" />
     <template v-if="view">
       <RemoteCursorLabel
@@ -217,6 +279,11 @@ defineExpose({
   position: relative;
   height: 100%;
   width: 100%;
+  border: 2px solid var(--editor-accent-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--editor-accent-color) 24%, transparent);
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .editor-host {

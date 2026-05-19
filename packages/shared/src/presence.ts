@@ -10,6 +10,10 @@ export type FileLocation = {
   workspaceId: string
   fileId: string | null
   path: string | null
+  scrollTop?: number
+  scrollHeight?: number
+  clientHeight?: number
+  scrollRatio?: number
 }
 
 export function colorFromUserId(userId: string): string {

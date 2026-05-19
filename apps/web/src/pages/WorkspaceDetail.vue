@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "@kitbag/router"
 import { useDisplay } from "vuetify"
 import { HocuspocusProvider } from "@hocuspocus/provider"
@@ -53,6 +53,11 @@ type WorkspacePreview = {
   output?: string
 }
 
+type PreviewBroadcast = {
+  revision: number
+  preview: WorkspacePreview
+}
+
 const route = useRoute()
 const router = useRouter()
 const { accessToken, currentUser } = useSession()
@@ -79,7 +84,10 @@ const preview = computed<WorkspacePreview | null>(() =>
   previewMode.value === "web" ? webPreview.value : terminalPreview.value
 )
 const codeEditorRef = ref<InstanceType<typeof CodeEditor> | null>(null)
+const editorScroll = ref<Pick<FileLocation, "scrollTop" | "scrollHeight" | "clientHeight" | "scrollRatio"> | null>(null)
+const followedUserId = ref<string | null>(null)
 let lastTreeRevision = 0
+let lastPreviewRevision = 0
 
 let presenceProvider: HocuspocusProvider | null = null
 let presenceDoc: Y.Doc | null = null
@@ -132,6 +140,49 @@ const presenceList = computed(() => {
 
 function presenceLabel(entry: PresenceEntry): string {
   return entry.location?.path ? `${entry.user.name} • ${entry.location.path}` : entry.user.name
+}
+
+const followedEntry = computed(() => {
+  if (!followedUserId.value) return null
+  return presenceList.value.find((entry) => entry.user.id === followedUserId.value) ?? null
+})
+const followedLocation = computed(() => followedEntry.value?.location ?? null)
+const followedEditorColor = computed(() => {
+  if (!activeFile.value || followedLocation.value?.fileId !== activeFile.value.id) return null
+  return followedEntry.value?.user.color ?? null
+})
+
+function setFollowUser(userId: string | null): void {
+  followedUserId.value = userId
+  if (userId) syncFollowTarget()
+}
+
+function navigateToPresenceLocation(location: FileLocation): void {
+  if (!location.fileId || !location.path) return
+  if (activeFile.value?.id === location.fileId) return
+  const file = files.value.find((row) => row.id === location.fileId && row.kind === "file")
+  if (file) {
+    navigateToFile(file)
+    return
+  }
+  void router.push("workspace-file", {
+    workspaceId: workspaceId.value,
+    filePath: location.path
+  })
+}
+
+function syncFollowTarget(): void {
+  const location = followedLocation.value
+  if (!location) return
+  navigateToPresenceLocation(location)
+  if (activeFile.value?.id === location.fileId) {
+    void nextTick(() => codeEditorRef.value?.scrollToLocation(location))
+  }
+}
+
+function handleEditorScroll(location: Pick<FileLocation, "scrollTop" | "scrollHeight" | "clientHeight" | "scrollRatio">): void {
+  editorScroll.value = location
+  updatePresenceLocation()
 }
 
 const voice = useVoice({ workspaceId, accessToken })
@@ -230,15 +281,38 @@ async function startPreview(): Promise<void> {
       return
     }
     const payload = (await response.json()) as { preview: WorkspacePreview }
-    if (mode === "web") {
-      webPreview.value = payload.preview
-      if (previewMode.value === "terminal") void fetchWebPreviewLog()
-    } else {
-      terminalPreview.value = payload.preview
-    }
+    applyPreview(payload.preview, false)
+    broadcastPreview(payload.preview)
   } finally {
     previewLoading.value = false
   }
+}
+
+function applyPreview(nextPreview: WorkspacePreview, switchMode: boolean): void {
+  if (switchMode) previewMode.value = nextPreview.type
+  if (nextPreview.type === "web") {
+    webPreview.value = nextPreview
+    if (previewMode.value === "terminal") void fetchWebPreviewLog()
+  } else {
+    terminalPreview.value = nextPreview
+  }
+}
+
+function broadcastPreview(nextPreview: WorkspacePreview): void {
+  if (!presenceProvider) return
+  lastPreviewRevision = Date.now()
+  presenceProvider.setAwarenessField("preview", {
+    revision: lastPreviewRevision,
+    preview: nextPreview
+  } satisfies PreviewBroadcast)
+}
+
+function applyPreviewBroadcast(update: PreviewBroadcast | undefined, localClientId: number | undefined, clientId: number): void {
+  if (!update || clientId === localClientId) return
+  if (typeof update.revision !== "number" || update.revision <= lastPreviewRevision) return
+  lastPreviewRevision = update.revision
+  previewError.value = null
+  applyPreview(update.preview, true)
 }
 
 async function fetchWebPreviewLog(): Promise<void> {
@@ -481,14 +555,16 @@ function connectPresence() {
   presenceProvider.setAwarenessField("user", currentUser.value)
   updatePresenceLocation()
   lastTreeRevision = 0
+  lastPreviewRevision = 0
 
   presenceProvider.on(
     "awarenessUpdate",
-    ({ states }: { states: Array<PresenceEntry & { clientId: number; treeRevision?: number }> }) => {
+    ({ states }: { states: Array<PresenceEntry & { clientId: number; treeRevision?: number; preview?: PreviewBroadcast }> }) => {
       presence.value = states.filter((entry) => entry.user)
       const localId = presenceProvider?.awareness?.clientID
       let maxRevision = 0
       for (const state of states) {
+        applyPreviewBroadcast(state.preview, localId, state.clientId)
         if (state.clientId === localId) continue
         const value = state.treeRevision
         if (typeof value === "number" && value > maxRevision) maxRevision = value
@@ -506,7 +582,8 @@ function updatePresenceLocation() {
   presenceProvider.setAwarenessField("location", {
     workspaceId: workspaceId.value,
     fileId: activeFile.value?.id ?? null,
-    path: activeFile.value?.path ?? null
+    path: activeFile.value?.path ?? null,
+    ...(editorScroll.value ?? {})
   } satisfies FileLocation)
 }
 
@@ -516,7 +593,21 @@ watch(workspaceId, (value) => {
 })
 
 watch(filePath, syncActiveFileFromRoute)
-watch(activeFile, updatePresenceLocation)
+watch(activeFile, () => {
+  editorScroll.value = null
+  updatePresenceLocation()
+  const location = followedLocation.value
+  if (location?.fileId === activeFile.value?.id) {
+    void nextTick(() => codeEditorRef.value?.scrollToLocation(location))
+  }
+})
+watch(
+  followedLocation,
+  () => {
+    if (followedUserId.value) syncFollowTarget()
+  },
+  { deep: true }
+)
 watch(currentUser, () => presenceProvider?.setAwarenessField("user", currentUser.value), { deep: true })
 
 if (workspaceId.value) void loadWorkspace()
@@ -627,6 +718,9 @@ onBeforeUnmount(() => {
             :presence-list="presenceList"
             :presence-label="presenceLabel"
             :voice-state-by-user-id="voiceStateByUserId"
+            :current-user-id="currentUser.id"
+            :followed-user-id="followedUserId"
+            @follow="setFollowUser"
           />
         </template>
       </Splitter>
@@ -641,6 +735,9 @@ onBeforeUnmount(() => {
           :presence-list="presenceList"
           :presence-label="presenceLabel"
           :voice-state-by-user-id="voiceStateByUserId"
+          :current-user-id="currentUser.id"
+          :followed-user-id="followedUserId"
+          @follow="setFollowUser"
         />
       </div>
 
@@ -743,7 +840,15 @@ onBeforeUnmount(() => {
           <div class="editor-preview-body">
             <section class="editor-column">
               <div v-if="activeFile" class="editor-host-wrapper">
-                <CodeEditor ref="codeEditorRef" :file="activeFile" :access-token="accessToken" :user="currentUser" />
+                <CodeEditor
+                  ref="codeEditorRef"
+                  :file="activeFile"
+                  :access-token="accessToken"
+                  :user="currentUser"
+                  :accent-color="followedEditorColor"
+                  :follow-location="followedLocation"
+                  @scroll-change="handleEditorScroll"
+                />
               </div>
               <div v-else class="workspace-stub">
                 <div class="workspace-stub-card">
@@ -808,7 +913,15 @@ onBeforeUnmount(() => {
         </v-alert>
 
         <div class="editor-host-wrapper">
-          <CodeEditor ref="codeEditorRef" :file="activeFile" :access-token="accessToken" :user="currentUser" />
+          <CodeEditor
+            ref="codeEditorRef"
+            :file="activeFile"
+            :access-token="accessToken"
+            :user="currentUser"
+            :accent-color="followedEditorColor"
+            :follow-location="followedLocation"
+            @scroll-change="handleEditorScroll"
+          />
         </div>
       </template>
       <div v-else class="workspace-stub">

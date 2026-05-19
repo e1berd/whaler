@@ -18,21 +18,39 @@ const props = defineProps<{
   presenceList: PresenceEntry[]
   presenceLabel: (entry: PresenceEntry) => string
   voiceStateByUserId: Record<string, MemberVoiceState>
+  currentUserId: string
+  followedUserId: string | null
 }>()
 
-function voiceFor(userId: string): MemberVoiceState | null {
-  return props.voiceStateByUserId[userId] ?? null
+const emit = defineEmits<{
+  follow: [userId: string | null]
+}>()
+
+function voiceFor(userId: string): MemberVoiceState {
+  return props.voiceStateByUserId[userId] ?? {
+    micMuted: true,
+    deafened: true,
+    volume: 0,
+    connected: false
+  }
 }
 
-function isSpeaking(state: MemberVoiceState | null): boolean {
-  if (!state) return false
+function isSpeaking(state: MemberVoiceState): boolean {
   if (state.micMuted) return false
   return state.volume > 0.07
 }
 
-function volumePercent(state: MemberVoiceState | null): number {
-  if (!state || state.micMuted) return 0
-  return Math.round(Math.min(1, state.volume) * 100)
+function volumeLevel(state: MemberVoiceState): number {
+  if (state.micMuted) return 0
+  return Math.min(1, Math.max(0.12, state.volume))
+}
+
+function isFollowing(userId: string): boolean {
+  return props.followedUserId === userId
+}
+
+function toggleFollow(userId: string): void {
+  emit("follow", isFollowing(userId) ? null : userId)
 }
 </script>
 
@@ -46,17 +64,22 @@ function volumePercent(state: MemberVoiceState | null): number {
         v-for="entry in presenceList"
         :key="entry.user.id"
         class="members-row"
-        :class="{ 'members-row--speaking': isSpeaking(voiceFor(entry.user.id)) }"
+        :class="{
+          'members-row--speaking': isSpeaking(voiceFor(entry.user.id)),
+          'members-row--following': isFollowing(entry.user.id)
+        }"
         :title="presenceLabel(entry)"
       >
         <div class="members-avatar-wrap">
           <span
+            v-if="!voiceFor(entry.user.id).micMuted"
+            class="members-volume-halo"
+            :style="{ '--volume-level': volumeLevel(voiceFor(entry.user.id)) }"
+          />
+          <span
             class="members-avatar"
             :style="{
-              backgroundColor: entry.user.color,
-              boxShadow: isSpeaking(voiceFor(entry.user.id))
-                ? `0 0 0 2px var(--md-sys-color-success, #4ade80)`
-                : undefined
+              backgroundColor: entry.user.color
             }"
           >
             <img v-if="entry.user.avatarUrl" :src="entry.user.avatarUrl" :alt="entry.user.name" />
@@ -69,27 +92,46 @@ function volumePercent(state: MemberVoiceState | null): number {
             <span class="members-name">{{ entry.user.name }}</span>
             <span class="members-voice-icons">
               <v-icon
-                v-if="voiceFor(entry.user.id)?.micMuted"
-                class="members-voice-icon members-voice-icon--muted"
-                icon="mdi-microphone-off"
+                class="members-voice-icon"
+                :class="{ 'members-voice-icon--muted': voiceFor(entry.user.id).micMuted }"
+                :icon="voiceFor(entry.user.id).micMuted ? 'mdi-microphone-off' : 'mdi-microphone'"
                 size="14"
-                title="Microphone off"
+                :title="voiceFor(entry.user.id).micMuted ? 'Microphone off' : 'Microphone on'"
               />
               <v-icon
-                v-if="voiceFor(entry.user.id)?.deafened"
-                class="members-voice-icon members-voice-icon--muted"
-                icon="mdi-headphones-off"
+                class="members-voice-icon"
+                :class="{ 'members-voice-icon--muted': voiceFor(entry.user.id).deafened }"
+                :icon="voiceFor(entry.user.id).deafened ? 'mdi-headphones-off' : 'mdi-headphones'"
                 size="14"
-                title="Speakers off"
+                :title="voiceFor(entry.user.id).deafened ? 'Speakers off' : 'Speakers on'"
               />
+              <span
+                v-if="!voiceFor(entry.user.id).micMuted"
+                class="members-wave"
+                :style="{ '--volume-level': volumeLevel(voiceFor(entry.user.id)) }"
+                title="Voice level"
+              >
+                <span />
+                <span />
+                <span />
+              </span>
             </span>
+            <v-tooltip v-if="entry.user.id !== currentUserId" location="top" :text="isFollowing(entry.user.id) ? 'Stop following' : 'Follow'">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn
+                  v-bind="tooltipProps"
+                  class="members-follow-btn"
+                  :class="{ 'members-follow-btn--active': isFollowing(entry.user.id) }"
+                  :icon="isFollowing(entry.user.id) ? 'mdi-eye' : 'mdi-eye-outline'"
+                  size="x-small"
+                  density="compact"
+                  variant="text"
+                  @click.stop="toggleFollow(entry.user.id)"
+                />
+              </template>
+            </v-tooltip>
           </div>
-          <div
-            v-if="!voiceFor(entry.user.id)?.micMuted && voiceFor(entry.user.id)"
-            class="members-volume"
-            :style="{ '--level': `${volumePercent(voiceFor(entry.user.id))}%` }"
-          />
-          <span v-else class="members-activity">{{ entry.location?.path ?? "Idle" }}</span>
+          <span class="members-activity">{{ entry.location?.path ?? "Idle" }}</span>
         </div>
       </li>
       <li v-if="!presenceList.length" class="members-empty">No one else is here.</li>
@@ -152,12 +194,30 @@ function volumePercent(state: MemberVoiceState | null): number {
   background: color-mix(in srgb, var(--md-sys-color-success-container, #34d399) 18%, transparent);
 }
 
+.members-row--following {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 13%, transparent);
+}
+
 .members-avatar-wrap {
   position: relative;
   flex-shrink: 0;
 }
 
+.members-volume-halo {
+  --volume-level: 0.12;
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid #4ade80;
+  opacity: calc(0.28 + var(--volume-level) * 0.52);
+  transform: scale(calc(1 + var(--volume-level) * 0.18));
+  transition: opacity 80ms linear, transform 80ms linear;
+  pointer-events: none;
+}
+
 .members-avatar {
+  position: relative;
+  z-index: 1;
   width: 30px;
   height: 30px;
   display: grid;
@@ -178,6 +238,7 @@ function volumePercent(state: MemberVoiceState | null): number {
 
 .members-status-dot {
   position: absolute;
+  z-index: 2;
   right: -2px;
   bottom: -2px;
   width: 10px;
@@ -230,30 +291,54 @@ function volumePercent(state: MemberVoiceState | null): number {
   color: rgb(var(--v-theme-error));
 }
 
+.members-wave {
+  --volume-level: 0.12;
+  width: 18px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #22c55e;
+}
+
+.members-wave span {
+  width: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: height 80ms linear;
+}
+
+.members-wave span:nth-child(1) {
+  height: calc(4px + var(--volume-level) * 5px);
+}
+
+.members-wave span:nth-child(2) {
+  height: calc(6px + var(--volume-level) * 8px);
+}
+
+.members-wave span:nth-child(3) {
+  height: calc(4px + var(--volume-level) * 6px);
+}
+
+.members-follow-btn {
+  width: 24px !important;
+  height: 24px !important;
+  flex-shrink: 0;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.members-follow-btn--active {
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 13%, transparent);
+}
+
 .members-activity {
   font-size: 11px;
   color: var(--md-sys-color-on-surface-variant);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.members-volume {
-  --level: 0%;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--md-sys-color-surface-container-highest, rgba(255, 255, 255, 0.08));
-  overflow: hidden;
-  position: relative;
-}
-
-.members-volume::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: var(--level);
-  background: linear-gradient(90deg, #4ade80, #facc15 70%, #ef4444 95%);
-  transition: width 80ms linear;
 }
 
 .members-empty {

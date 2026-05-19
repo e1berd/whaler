@@ -18,13 +18,7 @@ const create = createRoute({
 
 const detail = createRoute({
   name: "workspace-detail",
-  path: "/workspaces/[workspaceId]",
-  component: WorkspaceDetail
-})
-
-const detailFile = createRoute({
-  name: "workspace-file",
-  path: "/workspaces/[workspaceId]/[filePath*]",
+  path: "/workspaces/[workspaceId][?filePath*]",
   component: WorkspaceDetail
 })
 
@@ -34,7 +28,7 @@ const settings = createRoute({
   component: SettingsPage
 })
 
-export const routes = [home, create, detail, detailFile, settings] as const
+export const routes = [home, create, detail, settings] as const
 
 export const router = createRouter(routes, { historyMode: "browser" })
 

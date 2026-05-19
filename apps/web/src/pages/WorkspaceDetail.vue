@@ -98,15 +98,15 @@ const workspaceId = computed(() => {
 })
 const filePath = computed(() => {
   const raw = (route.params as { filePath?: string | string[] }).filePath
-  if (Array.isArray(raw)) return raw.join("/")
-  return raw ?? ""
+  const value = Array.isArray(raw) ? raw.join("/") : raw ?? ""
+  return value.replace(/^\/+/, "")
 })
 
 function navigateToFile(file: WorkspaceFile | null) {
   if (file?.kind === "file") {
-    void router.push("workspace-file", {
+    void router.push("workspace-detail", {
       workspaceId: workspaceId.value,
-      filePath: file.path
+      filePath: `/${file.path}`
     })
   } else {
     void router.push("workspace-detail", { workspaceId: workspaceId.value })
@@ -165,9 +165,9 @@ function navigateToPresenceLocation(location: FileLocation): void {
     navigateToFile(file)
     return
   }
-  void router.push("workspace-file", {
+  void router.push("workspace-detail", {
     workspaceId: workspaceId.value,
-    filePath: location.path
+    filePath: `/${location.path}`
   })
 }
 

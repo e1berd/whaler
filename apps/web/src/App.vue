@@ -39,7 +39,7 @@ watch(
 const activeKey = computed<"home" | "settings" | null>(() => {
   const name = route.name as string | undefined
   if (name === "settings") return "settings"
-  if (name === "home" || name === "workspace-create" || name === "workspace-detail" || name === "workspace-file") return "home"
+  if (name === "home" || name === "workspace-create" || name === "workspace-detail") return "home"
   return null
 })
 </script>

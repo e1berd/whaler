@@ -3,7 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "volta": {
+    "node": "24.15.0",
+    "pnpm": "11.2.2"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel --filter './apps/*' dev",
     "build": "pnpm -r --filter './packages/*' --filter './apps/*' build",
@@ -14,8 +21,5 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["mediasoup"]
   }
 }

@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    init: true
     environment:
       NODE_ENV: production
       API_PORT: 3000
@@ -14,7 +15,7 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
       RUNNER_INTERNAL_URL: ${RUNNER_INTERNAL_URL_DOCKER:-http://runner:3002}
       RUNNER_INTERNAL_TOKEN: ${RUNNER_INTERNAL_TOKEN}
-      STAND_BASE_DOMAIN: ${STAND_BASE_DOMAIN_DOCKER:-stand.whaler.ru}
+      STAND_BASE_DOMAIN: ${STAND_BASE_DOMAIN_DOCKER:-stand.localhost}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -25,6 +26,7 @@ services:
     build:
       context: .
       dockerfile: apps/collab/Dockerfile
+    init: true
     environment:
       NODE_ENV: production
       COLLAB_PORT: 3001
@@ -39,6 +41,7 @@ services:
     build:
       context: .
       dockerfile: apps/voice/Dockerfile
+    init: true
     environment:
       NODE_ENV: production
       VOICE_PORT: 3003
@@ -78,6 +81,7 @@ services:
     build:
       context: .
       dockerfile: apps/runner/Dockerfile
+    init: true
     environment:
       NODE_ENV: production
       RUNNER_PORT: 3002
@@ -113,7 +117,7 @@ services:
       API_DOMAIN: ${API_DOMAIN:-api.localhost}
       COLLAB_DOMAIN: ${COLLAB_DOMAIN:-collab.localhost}
       VOICE_DOMAIN: ${VOICE_DOMAIN:-voice.localhost}
-      STAND_BASE_DOMAIN: ${STAND_BASE_DOMAIN_DOCKER:-stand.whaler.ru}
+      STAND_BASE_DOMAIN: ${STAND_BASE_DOMAIN_DOCKER:-stand.localhost}
       SUPABASE_DOMAIN: ${SUPABASE_DOMAIN:-supabase.localhost}
       CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
       SUPABASE_UPSTREAM: ${SUPABASE_UPSTREAM:-host.docker.internal:54321}

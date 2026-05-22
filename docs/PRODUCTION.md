@@ -1,6 +1,6 @@
 # Подготовка Whaler к продакшену
 
-Документ описывает запуск приложения на VDS, например Beget VDS. Основная схема такая: Whaler запускается через `docker compose`, Caddy принимает публичный HTTPS-трафик, Supabase работает отдельным production-сервисом или отдельным compose-стеком, а Whaler подключается к Supabase по внутреннему upstream.
+Документ описывает запуск приложения на VDS или выделенном сервере. Основная схема такая: Whaler запускается через `docker compose`, Caddy принимает публичный HTTPS-трафик, Supabase работает отдельным production-сервисом или отдельным compose-стеком, а Whaler подключается к Supabase по внутреннему upstream.
 
 ## 1. Сервер
 
@@ -9,6 +9,8 @@
 - Linux VDS с Docker и Docker Compose plugin.
 - Публичный IPv4.
 - Открытые входящие порты `80/tcp`, `443/tcp`, `443/udp`.
+- Если используется встроенный TURN: `3478/tcp` и `3478/udp`.
+- Для WebRTC voice: диапазон mediasoup RTC-портов, по умолчанию `40000-40100/tcp` и `40000-40100/udp`.
 - Закрытые наружу Postgres, Docker socket и внутренние сервисы приложения.
 - Достаточно места под Docker images, sandbox-контейнеры, Caddy certificates и Supabase/Postgres volumes.
 
@@ -67,18 +69,18 @@ VITE_SUPABASE_URL=https://supabase.example.com
 
 Если Supabase находится на другой машине или в другом Docker network, используйте адрес его Kong/API gateway.
 
-## 4. Почта Beget
+## 4. SMTP для Supabase Auth
 
 Email-подтверждение и восстановление пароля отправляет Supabase Auth, не Whaler API. Переменные `MAIL_MAILER` и `MAIL_SCHEME` из Laravel здесь не нужны.
 
-В `.env` Whaler можно держать исходные SMTP-значения:
+В едином `.env` Whaler можно держать исходные SMTP-значения:
 
 ```dotenv
-MAIL_HOST=smtp.beget.com
+MAIL_HOST=smtp.example.com
 MAIL_PORT=465
-MAIL_USERNAME=ingbook@ingbook.ru
+MAIL_USERNAME=no-reply@example.com
 MAIL_PASSWORD=replace-with-real-password
-MAIL_FROM_ADDRESS=ingbook@ingbook.ru
+MAIL_FROM_ADDRESS=no-reply@example.com
 MAIL_FROM_NAME=Whaler
 ```
 
@@ -97,7 +99,7 @@ GOTRUE_SMTP_SENDER_NAME=${MAIL_FROM_NAME}
 
 ## 5. `.env` Whaler
 
-На сервере создайте `.env` из `.env.example` и замените значения:
+На сервере создайте `.env` из `.env.example` и замените значения. Для dev и production используется один и тот же dotenv-файл; отличаются только значения внутри него.
 
 ```dotenv
 DATABASE_URL=postgres://postgres:strong-password@supabase-db:5432/postgres
@@ -206,7 +208,7 @@ docker compose logs --tail=120 api
 - `https://app.example.com` открывает frontend.
 - `https://api.example.com` отвечает через Caddy.
 - `https://supabase.example.com/auth/v1/settings` доступен.
-- Регистрация отправляет письмо подтверждения через Beget.
+- Регистрация отправляет письмо подтверждения через настроенный SMTP.
 - После подтверждения email пользователь может войти.
 - `Forgot password` отправляет recovery-письмо.
 - Recovery-ссылка открывает экран установки нового пароля.
@@ -250,7 +252,7 @@ docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 - Проверьте `GOTRUE_MAILER_AUTOCONFIRM=false`.
 - Проверьте `GOTRUE_SITE_URL` и `GOTRUE_URI_ALLOW_LIST`.
 - Проверьте лог Supabase Auth.
-- Проверьте SPF/DKIM/DMARC домена отправителя у Beget.
+- Проверьте SPF/DKIM/DMARC домена отправителя у SMTP-провайдера.
 
 Если confirmation/recovery ссылка ведет не туда:
 

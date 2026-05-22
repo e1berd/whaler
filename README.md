@@ -29,8 +29,8 @@ Realtime browser code editor with self-hosted IAM, collaborative editing, and Do
    `just dev` starts local Supabase, builds missing sandbox preview images,
    starts TURN, and then runs the app services.
 
-3. If this is the first local run, copy the values from `just supabase-status`
-   into `.env`. The app expects:
+3. If this is the first local run, copy `.env.example` to `.env`, then copy
+   the values from `just supabase-status` into `.env`. The app expects:
 
    - `DATABASE_URL`
    - `SUPABASE_JWT_SECRET`
@@ -62,15 +62,21 @@ Caddy is configured for separate subdomains:
 - `APP_DOMAIN=app.example.com`
 - `API_DOMAIN=api.example.com`
 - `COLLAB_DOMAIN=collab.example.com`
+- `VOICE_DOMAIN=voice.example.com`
 - `SUPABASE_DOMAIN=supabase.example.com`
+- `STAND_BASE_DOMAIN_DOCKER=stand.example.com`
 
-For Beget VDS, create DNS `A` records for each subdomain pointing to the VDS public IPv4 address. If IPv6 is enabled, also add matching `AAAA` records.
+Create DNS `A` records for each subdomain pointing to the server public IPv4
+address. If IPv6 is enabled, also add matching `AAAA` records. Preview
+sandboxes require a wildcard record such as `*.stand.example.com`.
 
 Open these ports on the VDS firewall:
 
 - `80/tcp` for ACME HTTP challenge and redirects
 - `443/tcp` for HTTPS
 - `443/udp` for HTTP/3
+- `3478/tcp` and `3478/udp` if the bundled TURN profile is used
+- the configured mediasoup RTC range, default `40000-40100/tcp` and `40000-40100/udp`
 
 Do not expose Postgres or the Docker socket publicly.
 
@@ -82,14 +88,15 @@ Do not expose Postgres or the Docker socket publicly.
 - site URL: `https://app.example.com`
 - allowed redirect URLs: `https://app.example.com`
 
-Email confirmation and password recovery are handled by Supabase Auth, not Laravel mail. For Beget SMTP, keep only the mail values the Auth service needs:
+Email confirmation and password recovery are handled by Supabase Auth, not the
+Whaler API. Keep only the SMTP values the Auth service needs:
 
 ```dotenv
-MAIL_HOST=smtp.beget.com
+MAIL_HOST=smtp.example.com
 MAIL_PORT=465
-MAIL_USERNAME=ingbook@ingbook.ru
-MAIL_PASSWORD=replace-with-beget-mailbox-password
-MAIL_FROM_ADDRESS=ingbook@ingbook.ru
+MAIL_USERNAME=no-reply@example.com
+MAIL_PASSWORD=replace-with-smtp-password
+MAIL_FROM_ADDRESS=no-reply@example.com
 MAIL_FROM_NAME=Whaler
 ```
 
@@ -115,3 +122,5 @@ just typecheck
 just build
 docker compose config
 ```
+
+For a full server checklist, see `docs/PRODUCTION.md`.

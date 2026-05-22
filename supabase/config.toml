@@ -217,9 +217,9 @@ otp_length = 6
 otp_expiry = 3600
 
 # Local development keeps using Supabase CLI's Inbucket/Mailpit capture server.
-# In production, configure the self-hosted Auth service with Beget SMTP env vars:
+# In production, configure the self-hosted Auth service with SMTP env vars:
 # GOTRUE_MAILER_AUTOCONFIRM=false
-# GOTRUE_SMTP_HOST=smtp.beget.com
+# GOTRUE_SMTP_HOST=${MAIL_HOST}
 # GOTRUE_SMTP_PORT=465
 # GOTRUE_SMTP_USER=${MAIL_USERNAME}
 # GOTRUE_SMTP_PASS=${MAIL_PASSWORD}
@@ -227,7 +227,7 @@ otp_expiry = 3600
 # GOTRUE_SMTP_SENDER_NAME=${MAIL_FROM_NAME}
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.beget.com"
+# host = "env(MAIL_HOST)"
 # port = 465
 # user = "env(MAIL_USERNAME)"
 # pass = "env(MAIL_PASSWORD)"

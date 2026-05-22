@@ -81,6 +81,66 @@ sandbox-up: sandbox-network sandbox-images
 sandbox-network:
     docker network create "${PREVIEW_NETWORK_NAME:-whaler-preview}" >/dev/null 2>&1 || true
 
+beget-stand-cert:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f .env ]; then
+      echo "Missing .env." >&2
+      exit 1
+    fi
+    set -a
+    . ./.env
+    set +a
+    : "${BEGET_USERNAME:?BEGET_USERNAME is required in .env}"
+    : "${BEGET_PASSWORD:?BEGET_PASSWORD is required in .env}"
+    : "${CADDY_ACME_EMAIL:?CADDY_ACME_EMAIL is required in .env}"
+    : "${STAND_BASE_DOMAIN_DOCKER:?STAND_BASE_DOMAIN_DOCKER is required in .env}"
+    mkdir -p storage/lego
+    docker run --rm \
+      -e BEGET_USERNAME \
+      -e BEGET_PASSWORD \
+      -v "$PWD/storage/lego:/lego" \
+      goacme/lego:latest \
+      --path /lego \
+      --email "$CADDY_ACME_EMAIL" \
+      --accept-tos \
+      --dns beget \
+      -d "*.${STAND_BASE_DOMAIN_DOCKER}" \
+      run
+    echo
+    echo "Add this to .env before starting Caddy:"
+    echo "STAND_TLS_DIRECTIVE=tls /lego/certificates/_.${STAND_BASE_DOMAIN_DOCKER}.crt /lego/certificates/_.${STAND_BASE_DOMAIN_DOCKER}.key"
+
+beget-stand-cert-renew:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f .env ]; then
+      echo "Missing .env." >&2
+      exit 1
+    fi
+    set -a
+    . ./.env
+    set +a
+    : "${BEGET_USERNAME:?BEGET_USERNAME is required in .env}"
+    : "${BEGET_PASSWORD:?BEGET_PASSWORD is required in .env}"
+    : "${CADDY_ACME_EMAIL:?CADDY_ACME_EMAIL is required in .env}"
+    : "${STAND_BASE_DOMAIN_DOCKER:?STAND_BASE_DOMAIN_DOCKER is required in .env}"
+    mkdir -p storage/lego
+    docker run --rm \
+      -e BEGET_USERNAME \
+      -e BEGET_PASSWORD \
+      -v "$PWD/storage/lego:/lego" \
+      goacme/lego:latest \
+      --path /lego \
+      --email "$CADDY_ACME_EMAIL" \
+      --accept-tos \
+      --dns beget \
+      -d "*.${STAND_BASE_DOMAIN_DOCKER}" \
+      renew --days 30
+    if docker compose ps -q caddy >/dev/null 2>&1; then
+      docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+    fi
+
 turn-up:
     docker compose --profile turn up -d coturn
 

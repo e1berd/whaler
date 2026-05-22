@@ -6,3 +6,4 @@ dist
 coverage
 *.log
 infra/supabase/volumes
+storage/lego

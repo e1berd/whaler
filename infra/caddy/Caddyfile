@@ -45,6 +45,7 @@
 }
 
 *.{$STAND_BASE_DOMAIN} {
+	{$STAND_TLS_DIRECTIVE}
 	encode zstd gzip
 
 	header {

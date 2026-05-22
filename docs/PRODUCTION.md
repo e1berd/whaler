@@ -164,7 +164,7 @@ STUN_URL=stun:stun.l.google.com:19302
 Перед первым запуском создайте preview network и соберите sandbox images:
 
 ```bash
-docker network create whaler-preview
+just sandbox-network
 just sandbox-images
 ```
 
@@ -294,4 +294,4 @@ docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 
 - Проверьте wildcard DNS `*.stand.example.com`.
 - Проверьте `STAND_BASE_DOMAIN_DOCKER=stand.example.com`.
-- Проверьте Docker network `whaler-preview`.
+- Проверьте Docker network из `PREVIEW_NETWORK_NAME` (`whaler-preview` по умолчанию).

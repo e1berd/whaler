@@ -79,7 +79,7 @@ prod: sandbox-up
 sandbox-up: sandbox-network sandbox-images
 
 sandbox-network:
-    docker network create whaler-preview >/dev/null 2>&1 || true
+    docker network create "${PREVIEW_NETWORK_NAME:-whaler-preview}" >/dev/null 2>&1 || true
 
 turn-up:
     docker compose --profile turn up -d coturn

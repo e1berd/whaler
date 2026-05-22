@@ -146,3 +146,4 @@ volumes:
 networks:
   preview:
     name: ${PREVIEW_NETWORK_NAME:-whaler-preview}
+    external: true

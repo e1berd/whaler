@@ -44,6 +44,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "scroll-change": [location: Pick<FileLocation, "scrollTop" | "scrollHeight" | "clientHeight" | "scrollRatio">]
+  "content-change": [content: string]
+  save: []
 }>()
 
 const host = ref<HTMLElement | null>(null)
@@ -64,6 +66,8 @@ let ydoc: Y.Doc | null = null
 let removeAwarenessListener: (() => void) | null = null
 let scrollEmitFrame: number | null = null
 let followScrollFrame: number | null = null
+let changeTrackingFrame: number | null = null
+let trackDocumentChanges = false
 const themeCompartment = new Compartment()
 const highlightCompartment = new Compartment()
 
@@ -157,8 +161,11 @@ function dispose() {
   removeAwarenessListener = null
   if (scrollEmitFrame !== null) window.cancelAnimationFrame(scrollEmitFrame)
   if (followScrollFrame !== null) window.cancelAnimationFrame(followScrollFrame)
+  if (changeTrackingFrame !== null) window.cancelAnimationFrame(changeTrackingFrame)
   scrollEmitFrame = null
   followScrollFrame = null
+  changeTrackingFrame = null
+  trackDocumentChanges = false
   view.value?.destroy()
   provider?.destroy()
   ydoc?.destroy()
@@ -194,6 +201,15 @@ async function mountEditor() {
     },
     onSynced: ({ state }: { state: boolean }) => {
       syncState.value = state ? "synced" : "connected"
+      if (state) {
+        if (changeTrackingFrame !== null) window.cancelAnimationFrame(changeTrackingFrame)
+        changeTrackingFrame = window.requestAnimationFrame(() => {
+          changeTrackingFrame = null
+          trackDocumentChanges = true
+        })
+      } else {
+        trackDocumentChanges = false
+      }
     },
     onAuthenticationFailed: () => {
       syncState.value = "error"
@@ -214,12 +230,25 @@ async function mountEditor() {
         highlightActiveLineGutter(),
         highlightActiveLine(),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        keymap.of([
+          {
+            key: "Mod-s",
+            run: () => {
+              emit("save")
+              return true
+            }
+          },
+          ...defaultKeymap,
+          ...historyKeymap
+        ]),
         bracketMatching(),
         indentOnInput(),
         highlightCompartment.of(editorHighlight(modeFromTheme(effectiveThemeName.value))),
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
+          if (update.docChanged && trackDocumentChanges) {
+            emit("content-change", update.state.doc.toString())
+          }
           if (update.docChanged || update.viewportChanged || update.geometryChanged) {
             recomputeRemoteCursors()
             scheduleScrollEmit()

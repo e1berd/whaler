@@ -78,6 +78,8 @@ const webPreview = ref<WorkspacePreview | null>(null)
 const terminalPreview = ref<WorkspacePreview | null>(null)
 const previewError = ref<string | null>(null)
 const logStreaming = ref(false)
+const fileSaveLoading = ref(false)
+const containerDirtyFileIds = ref<Set<string>>(new Set())
 let logTimer: number | null = null
 
 const preview = computed<WorkspacePreview | null>(() =>
@@ -151,6 +153,38 @@ const followedEditorColor = computed(() => {
   if (!activeFile.value || followedLocation.value?.fileId !== activeFile.value.id) return null
   return followedEntry.value?.user.color ?? null
 })
+const activeFileContainerDirty = computed(() =>
+  activeFile.value ? containerDirtyFileIds.value.has(activeFile.value.id) : false
+)
+const containerSaveStatus = computed(() => {
+  if (!activeFile.value) return null
+  if (fileSaveLoading.value) {
+    return {
+      icon: "mdi-cloud-upload-outline",
+      text: "Saving to container",
+      color: "primary"
+    }
+  }
+  if (activeFileContainerDirty.value) {
+    return {
+      icon: "mdi-alert-circle-outline",
+      text: "Not saved to container",
+      color: "warning"
+    }
+  }
+  return {
+    icon: "mdi-check-circle-outline",
+    text: "Saved to container",
+    color: "success"
+  }
+})
+
+function setContainerDirty(fileId: string, dirty: boolean): void {
+  const next = new Set(containerDirtyFileIds.value)
+  if (dirty) next.add(fileId)
+  else next.delete(fileId)
+  containerDirtyFileIds.value = next
+}
 
 function setFollowUser(userId: string | null): void {
   followedUserId.value = userId
@@ -183,6 +217,11 @@ function syncFollowTarget(): void {
 function handleEditorScroll(location: Pick<FileLocation, "scrollTop" | "scrollHeight" | "clientHeight" | "scrollRatio">): void {
   editorScroll.value = location
   updatePresenceLocation()
+}
+
+function markActiveFileContainerDirty(_content?: string): void {
+  if (!activeFile.value) return
+  setContainerDirty(activeFile.value.id, true)
 }
 
 const voice = useVoice({ workspaceId, accessToken })
@@ -256,17 +295,8 @@ async function startPreview(): Promise<void> {
   previewError.value = null
   const mode = previewMode.value
   try {
-    if (activeFile.value && codeEditorRef.value) {
-      const saveResponse = await client().v1.files[":fileId"].$put({
-        param: { fileId: activeFile.value.id },
-        json: { content: codeEditorRef.value.getContent() }
-      })
-      if (!saveResponse.ok) {
-        if (await handleUnauthorizedResponse(saveResponse)) return
-        previewError.value = await saveResponse.text()
-        return
-      }
-    }
+    const saved = await saveActiveFileToContainer({ surface: "preview" })
+    if (!saved) return
 
     const response = await client().v1.workspaces[":workspaceId"].previews.$post({
       param: { workspaceId: workspaceId.value },
@@ -285,6 +315,34 @@ async function startPreview(): Promise<void> {
     broadcastPreview(payload.preview)
   } finally {
     previewLoading.value = false
+  }
+}
+
+async function saveActiveFileToContainer(options: { surface?: "editor" | "preview" } = {}): Promise<boolean> {
+  const file = activeFile.value
+  const editor = codeEditorRef.value
+  if (!file || !editor) return true
+
+  fileSaveLoading.value = true
+  if (options.surface === "preview") previewError.value = null
+  else error.value = null
+
+  try {
+    const response = await client().v1.files[":fileId"].$put({
+      param: { fileId: file.id },
+      json: { content: editor.getContent() }
+    })
+    if (!response.ok) {
+      if (await handleUnauthorizedResponse(response)) return false
+      const message = await response.text()
+      if (options.surface === "preview") previewError.value = message
+      else error.value = message
+      return false
+    }
+    setContainerDirty(file.id, false)
+    return true
+  } finally {
+    fileSaveLoading.value = false
   }
 }
 
@@ -506,6 +564,7 @@ async function renameFile(file: WorkspaceFile, nextPath: string) {
     return
   }
   const activeId = activeFile.value?.id
+  setContainerDirty(file.id, true)
   await loadFiles()
   broadcastTreeChange()
   if (activeId) {
@@ -826,6 +885,27 @@ onBeforeUnmount(() => {
               >
                 {{ presenceList.length }} online
               </v-chip>
+              <v-chip
+                v-if="containerSaveStatus"
+                class="container-save-chip"
+                size="small"
+                variant="tonal"
+                :color="containerSaveStatus.color"
+                :prepend-icon="containerSaveStatus.icon"
+              >
+                {{ containerSaveStatus.text }}
+              </v-chip>
+              <v-btn
+                class="save-btn"
+                variant="tonal"
+                prepend-icon="mdi-content-save-outline"
+                :loading="fileSaveLoading"
+                :disabled="!activeFile"
+                title="Save to container (Ctrl+S)"
+                @click="() => saveActiveFileToContainer()"
+              >
+                Save
+              </v-btn>
               <v-btn
                 class="run-btn"
                 color="primary"
@@ -862,6 +942,8 @@ onBeforeUnmount(() => {
                     :user="currentUser"
                     :accent-color="followedEditorColor"
                     :follow-location="followedLocation"
+                    @content-change="markActiveFileContainerDirty"
+                    @save="() => saveActiveFileToContainer()"
                     @scroll-change="handleEditorScroll"
                   />
                 </div>
@@ -917,6 +999,27 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="editor-toolbar-meta">
+            <v-chip
+              v-if="containerSaveStatus"
+              class="container-save-chip"
+              size="small"
+              variant="tonal"
+              :color="containerSaveStatus.color"
+              :prepend-icon="containerSaveStatus.icon"
+            >
+              {{ containerSaveStatus.text }}
+            </v-chip>
+            <v-btn
+              class="save-btn"
+              variant="tonal"
+              prepend-icon="mdi-content-save-outline"
+              :loading="fileSaveLoading"
+              :disabled="!activeFile"
+              title="Save to container (Ctrl+S)"
+              @click="() => saveActiveFileToContainer()"
+            >
+              Save
+            </v-btn>
             <v-btn
               class="run-btn"
               color="primary"
@@ -942,6 +1045,8 @@ onBeforeUnmount(() => {
             :user="currentUser"
             :accent-color="followedEditorColor"
             :follow-location="followedLocation"
+            @content-change="markActiveFileContainerDirty"
+            @save="() => saveActiveFileToContainer()"
             @scroll-change="handleEditorScroll"
           />
         </div>
@@ -1308,6 +1413,17 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
+.container-save-chip {
+  max-width: 220px;
+}
+
+.container-save-chip :deep(.v-chip__content) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .editor-title-row {
   display: flex;
   align-items: center;
@@ -1355,6 +1471,11 @@ onBeforeUnmount(() => {
 .run-btn {
   height: 40px !important;
   padding: 0 18px !important;
+  font-weight: 700 !important;
+}
+
+.save-btn {
+  height: 40px !important;
   font-weight: 700 !important;
 }
 

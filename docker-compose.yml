@@ -119,7 +119,7 @@ services:
       VOICE_DOMAIN: ${VOICE_DOMAIN:-voice.localhost}
       STAND_BASE_DOMAIN: ${STAND_BASE_DOMAIN_DOCKER:-stand.localhost}
       SUPABASE_DOMAIN: ${SUPABASE_DOMAIN:-supabase.localhost}
-      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:-admin@example.com}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:?CADDY_ACME_EMAIL must be set to a real email address for ACME}
       SUPABASE_UPSTREAM: ${SUPABASE_UPSTREAM:-host.docker.internal:54321}
     extra_hosts:
       - "host.docker.internal:host-gateway"

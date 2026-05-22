@@ -69,7 +69,20 @@ VITE_SUPABASE_URL=https://supabase.example.com
 
 Если Supabase находится на другой машине или в другом Docker network, используйте адрес его Kong/API gateway.
 
-## 4. SMTP для Supabase Auth
+## 4. Wildcard TLS для preview
+
+Preview sandbox открывается на динамических хостах вида
+`<preview-id>.stand.example.com`. Для HTTPS на таких хостах нужен wildcard
+сертификат `*.stand.example.com`.
+
+Стандартный образ `caddy:2.10-alpine` не может выпустить wildcard-сертификат
+через HTTP challenge. Для production выберите один вариант:
+
+- собрать Caddy с DNS-плагином вашего DNS-провайдера и настроить DNS-01 challenge;
+- выпустить wildcard-сертификат отдельно и подключить его в Caddy через `tls /path/fullchain.pem /path/privkey.pem`;
+- временно отключить preview wildcard route, если production preview пока не нужен.
+
+## 5. SMTP для Supabase Auth
 
 Email-подтверждение и восстановление пароля отправляет Supabase Auth, не Whaler API. Переменные `MAIL_MAILER` и `MAIL_SCHEME` из Laravel здесь не нужны.
 
@@ -97,7 +110,7 @@ GOTRUE_SMTP_SENDER_NAME=${MAIL_FROM_NAME}
 
 После изменения SMTP-переменных перезапустите именно Supabase Auth. Затем проверьте регистрацию нового пользователя и письмо восстановления пароля.
 
-## 5. `.env` Whaler
+## 6. `.env` Whaler
 
 На сервере создайте `.env` из `.env.example` и замените значения. Для dev и production используется один и тот же dotenv-файл; отличаются только значения внутри него.
 
@@ -121,7 +134,7 @@ VITE_API_URL=https://api.example.com
 VITE_COLLAB_URL=wss://collab.example.com
 VITE_VOICE_URL=wss://voice.example.com
 
-CADDY_ACME_EMAIL=admin@example.com
+CADDY_ACME_EMAIL=ops@example.com
 SUPABASE_UPSTREAM=host.docker.internal:54321
 
 RUNNER_INTERNAL_TOKEN=replace-with-long-random-token
@@ -143,7 +156,10 @@ STUN_URL=stun:stun.l.google.com:19302
 
 `VITE_*` переменные попадают в frontend на этапе сборки Docker image. Если меняете домены или anon key, пересоберите `web` image.
 
-## 6. Сборка и запуск
+`CADDY_ACME_EMAIL` должен быть реальным почтовым адресом. Let's Encrypt
+отклоняет placeholder-домены вроде `example.com`.
+
+## 7. Сборка и запуск
 
 Перед первым запуском создайте preview network и соберите sandbox images:
 
@@ -177,7 +193,7 @@ git pull
 docker compose up -d --build
 ```
 
-## 7. База данных
+## 8. База данных
 
 Whaler использует Drizzle-миграции из `packages/db/drizzle`. Перед миграцией убедитесь, что `DATABASE_URL` указывает на production Postgres Supabase.
 
@@ -190,7 +206,7 @@ DATABASE_URL=postgres://postgres:strong-password@host:5432/postgres pnpm --filte
 
 Не запускайте `supabase db reset` на production: он пересоздает локальную базу и опасен для данных.
 
-## 8. Проверки перед открытием пользователям
+## 9. Проверки перед открытием пользователям
 
 Проверьте локально на сервере:
 
@@ -216,7 +232,7 @@ docker compose logs --tail=120 api
 - Preview sandbox открывается на поддомене `*.stand.example.com`.
 - Voice/collab работают через `wss://voice.example.com` и `wss://collab.example.com`.
 
-## 9. Обслуживание
+## 10. Обслуживание
 
 Полезные команды:
 
@@ -244,7 +260,7 @@ docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 
 Регулярно делайте backup production Postgres/Supabase volumes. Минимальная рабочая политика: ежедневный backup базы, проверка восстановления на отдельной машине и отдельное хранение секретов `.env`.
 
-## 10. Частые ошибки
+## 11. Частые ошибки
 
 Если письма не приходят:
 

@@ -72,6 +72,11 @@ Create DNS `A` records for each subdomain pointing to the server public IPv4
 address. If IPv6 is enabled, also add matching `AAAA` records. Preview
 sandboxes require a wildcard record such as `*.stand.example.com`.
 
+Preview HTTPS also requires a wildcard certificate for `*.stand.example.com`.
+The stock `caddy:2.10-alpine` image cannot issue wildcard certificates with
+HTTP challenge; use a Caddy DNS plugin for your DNS provider or mount an
+externally issued wildcard certificate.
+
 Open these ports on the VDS firewall:
 
 - `80/tcp` for ACME HTTP challenge and redirects
@@ -81,6 +86,9 @@ Open these ports on the VDS firewall:
 - the configured mediasoup RTC range, default `40000-40100/tcp` and `40000-40100/udp`
 
 Do not expose Postgres or the Docker socket publicly.
+
+Set `CADDY_ACME_EMAIL` to a real email address before starting Caddy with
+public domains. ACME providers reject placeholder domains such as `example.com`.
 
 ## Supabase Production Note
 

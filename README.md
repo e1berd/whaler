@@ -2,6 +2,8 @@
 
 Realtime browser code editor with self-hosted IAM, collaborative editing, and Docker-backed sandboxes.
 
+![Hero Block](./docs/readme_hero.png)
+
 ## Stack
 
 - Vue + Vuetify 4 + CodeMirror 6

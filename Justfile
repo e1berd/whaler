@@ -56,6 +56,26 @@ dev: supabase-start sandbox-up turn-up
 
     wait -n "${pids[@]}"
 
+prod: sandbox-up
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ ! -f .env ]; then
+      echo "Missing .env. Copy .env.example to .env and fill production values." >&2
+      exit 1
+    fi
+
+    set -a
+    . ./.env
+    set +a
+
+    if [ -z "${CADDY_ACME_EMAIL:-}" ] || [ "${CADDY_ACME_EMAIL}" = "admin@example.com" ]; then
+      echo "CADDY_ACME_EMAIL must be set to a real email address in .env." >&2
+      exit 1
+    fi
+
+    docker compose up -d --build
+
 sandbox-up: sandbox-network sandbox-images
 
 sandbox-network:

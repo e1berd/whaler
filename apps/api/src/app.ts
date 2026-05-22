@@ -97,6 +97,40 @@ type PublicWorkspace = {
 
 const app = new Hono()
 
+async function ensureWorkspaceContainer(workspaceId: string) {
+  const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1)
+  if (!workspace) {
+    throw new HTTPException(404, { message: "Workspace not found" })
+  }
+
+  const runnerResult = await createSandboxContainer({
+    workspaceId,
+    image: workspace.imageRef
+  })
+
+  if (runnerResult) {
+    await db
+      .update(workspaces)
+      .set({
+        containerId: runnerResult.containerId,
+        containerStatus: runnerResult.status,
+        containerError: null,
+        updatedAt: new Date()
+      })
+      .where(eq(workspaces.id, workspaceId))
+  }
+}
+
+async function mirrorWorkspaceEntrySafely(input: {
+  workspaceId: string
+  path: string
+  kind: "file" | "directory"
+  content?: string | undefined
+}) {
+  await ensureWorkspaceContainer(input.workspaceId)
+  await mirrorWorkspaceEntry(input)
+}
+
 app.onError((error, c) => {
   if (error instanceof RunnerRequestError) {
     const status = error.status >= 500 ? 502 : error.status
@@ -516,7 +550,7 @@ const routes = app
       throw new HTTPException(500, { message: "File was not created" })
     }
 
-    await mirrorWorkspaceEntry({
+    await mirrorWorkspaceEntrySafely({
       workspaceId,
       path,
       kind: body.kind,
@@ -645,7 +679,7 @@ const routes = app
       throw new HTTPException(404, { message: "File not found" })
     }
 
-    await mirrorWorkspaceEntry({
+    await mirrorWorkspaceEntrySafely({
       workspaceId: updated.workspaceId,
       path: updated.path,
       kind: "file",
